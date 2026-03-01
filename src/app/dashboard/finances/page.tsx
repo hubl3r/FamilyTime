@@ -124,6 +124,35 @@ const fmtDate = (d: string | null | undefined) =>
 const daysSince = (d: string) =>
   Math.floor((Date.now() - new Date(d + "T00:00:00").getTime()) / 86400000);
 
+// ── Standalone form components (must be outside FinancesPage to avoid remount on rerender) ──
+function FormInput({ label, value, onChange, type = "text", placeholder = "" }: {
+  label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string;
+}) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 6 }}>{label}</div>
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 14, color: "#3D2C2C", background: "#fff", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+      />
+    </div>
+  );
+}
+
+function FormSelect({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void; options: { id: string; label: string }[];
+}) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 6 }}>{label}</div>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 14, color: "#3D2C2C", background: "#fff", outline: "none", fontFamily: "inherit" }}>
+        <option value="">Select...</option>
+        {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 // ── Components ────────────────────────────────────────────────
 function RevealField({ label, value }: { label: string; value: string | null }) {
   const [revealed, setRevealed] = useState(false);
@@ -298,26 +327,12 @@ export default function FinancesPage() {
   const f = (key: string) => form[key] ?? "";
   const sf = (key: string) => (val: string) => setForm(prev => ({ ...prev, [key]: val }));
 
-  // ── Input helper ─────────────────────────────────
-  const Input = ({ label, k, type = "text", placeholder = "" }: { label: string; k: string; type?: string; placeholder?: string }) => (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 6 }}>{label}</div>
-      <input
-        type={type} value={f(k)} onChange={e => sf(k)(e.target.value)} placeholder={placeholder}
-        style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 14, color: "#3D2C2C", background: "#fff", outline: "none", fontFamily: "inherit" }}
-      />
-    </div>
-  );
+  // Convenience wrappers that bind to form state
+  const Input = ({ label, k, type = "text", placeholder = "" }: { label: string; k: string; type?: string; placeholder?: string }) =>
+    <FormInput label={label} value={f(k)} onChange={sf(k)} type={type} placeholder={placeholder} />;
 
-  const Select = ({ label, k, options }: { label: string; k: string; options: { id: string; label: string }[] }) => (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 6 }}>{label}</div>
-      <select value={f(k)} onChange={e => sf(k)(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 14, color: "#3D2C2C", background: "#fff", outline: "none", fontFamily: "inherit" }}>
-        <option value="">Select...</option>
-        {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-      </select>
-    </div>
-  );
+  const Select = ({ label, k, options }: { label: string; k: string; options: { id: string; label: string }[] }) =>
+    <FormSelect label={label} value={f(k)} onChange={sf(k)} options={options} />;
 
   // ── Views ─────────────────────────────────────────
   const renderDashboard = () => {
