@@ -1,0 +1,26 @@
+{
+  "name": "familytime",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^16.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "next-auth": "^4.24.11",
+    "bcryptjs": "^3.0.2",
+    "@supabase/supabase-js": "^2.49.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
