@@ -1,6 +1,6 @@
 // src/app/api/finances/bills/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import supabaseServer from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase";
 import { getSessionMember } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 

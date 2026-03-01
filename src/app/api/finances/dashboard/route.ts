@@ -2,7 +2,7 @@
 // Financial dashboard summary — budget vs actual, totals, alerts
 
 import { NextResponse } from "next/server";
-import supabaseServer from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase";
 import { getSessionMember } from "@/lib/permissions";
 
 export async function GET() {
