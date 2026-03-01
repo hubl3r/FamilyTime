@@ -205,6 +205,168 @@ function BudgetBar({ budget, actual, accent }: { budget: number; actual: number;
 }
 
 // ── Main Page ─────────────────────────────────────────────────
+
+// ── Modal: Add Bill ───────────────────────────────────────────
+function AddBillModal({ form, setForm, saving, onSave, onClose, accent }: {
+  form: Record<string,string>; setForm: React.Dispatch<React.SetStateAction<Record<string,string>>>;
+  saving: boolean; onSave: () => void; onClose: () => void; accent: string;
+}) {
+  const f = (k: string) => form[k] ?? "";
+  const sf = (k: string) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>Add Account</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
+        </div>
+        <FormSelect label="Category" value={f("category")} onChange={sf("category")} options={CATEGORIES.filter(c => c.id !== "credit_cards").map(c => ({ id: c.id, label: `${c.icon} ${c.label}` }))}/>
+        <FormInput label="Account Name" value={f("name")} onChange={sf("name")} placeholder="e.g. Electric Bill"/>
+        <FormSelect label="Frequency" value={f("frequency")} onChange={sf("frequency")} options={FREQUENCIES}/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Anticipated Amount" value={f("anticipated_amount")} onChange={sf("anticipated_amount")} type="number" placeholder="0.00"/>
+          <FormInput label="Budget Amount" value={f("budget_amount")} onChange={sf("budget_amount")} type="number" placeholder="0.00"/>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Day of Month Due" value={f("day_of_month")} onChange={sf("day_of_month")} type="number" placeholder="1-31"/>
+          <FormInput label="Start Date" value={f("start_date")} onChange={sf("start_date")} type="date"/>
+        </div>
+        <FormInput label="Payee Name" value={f("payee_name")} onChange={sf("payee_name")} placeholder="Company name"/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Phone" value={f("phone")} onChange={sf("phone")} placeholder="555-000-0000"/>
+          <FormInput label="Website" value={f("website")} onChange={sf("website")} placeholder="https://"/>
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>🔒 Credentials (encrypted)</div>
+        <FormInput label="Account Number" value={f("account_number")} onChange={sf("account_number")} placeholder="Account #"/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Username" value={f("username")} onChange={sf("username")} placeholder="Login username"/>
+          <FormInput label="Password" value={f("password")} onChange={sf("password")} placeholder="Login password"/>
+        </div>
+        <FormInput label="Notes" value={f("notes")} onChange={sf("notes")} placeholder="Any additional notes"/>
+        <button onClick={onSave} disabled={saving || !f("name") || !f("category")} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
+          {saving ? "Saving..." : "Save Account"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Add Credit Card ────────────────────────────────────
+function AddCardModal({ form, setForm, saving, onSave, onClose, accent }: {
+  form: Record<string,string>; setForm: React.Dispatch<React.SetStateAction<Record<string,string>>>;
+  saving: boolean; onSave: () => void; onClose: () => void; accent: string;
+}) {
+  const f = (k: string) => form[k] ?? "";
+  const sf = (k: string) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>Add Credit Card</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
+        </div>
+        <FormInput label="Card Name" value={f("name")} onChange={sf("name")} placeholder="e.g. Chase Sapphire"/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Issuer" value={f("issuer")} onChange={sf("issuer")} placeholder="Chase, Citi, Amex..."/>
+          <FormInput label="Card Type" value={f("card_type")} onChange={sf("card_type")} placeholder="Visa, MC, Amex..."/>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Credit Limit" value={f("credit_limit")} onChange={sf("credit_limit")} type="number" placeholder="0.00"/>
+          <FormInput label="APR (%)" value={f("apr")} onChange={sf("apr")} type="number" placeholder="0.00"/>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Minimum Payment" value={f("minimum_payment")} onChange={sf("minimum_payment")} type="number" placeholder="0.00"/>
+          <FormInput label="Planned Payment" value={f("anticipated_payment")} onChange={sf("anticipated_payment")} type="number" placeholder="0.00"/>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Statement Day" value={f("statement_day")} onChange={sf("statement_day")} type="number" placeholder="1-31"/>
+          <FormInput label="Due Day" value={f("due_day")} onChange={sf("due_day")} type="number" placeholder="1-31"/>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Last 4 Digits" value={f("last_four")} onChange={sf("last_four")} placeholder="0000"/>
+          <FormInput label="Rewards Program" value={f("rewards_program")} onChange={sf("rewards_program")} placeholder="Points, Miles..."/>
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>🔒 Credentials (encrypted)</div>
+        <FormInput label="Account Number" value={f("account_number")} onChange={sf("account_number")} placeholder="Full account number"/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormInput label="Username" value={f("username")} onChange={sf("username")} placeholder="Online login"/>
+          <FormInput label="Password" value={f("password")} onChange={sf("password")} placeholder="Online password"/>
+        </div>
+        <FormInput label="Website" value={f("website")} onChange={sf("website")} placeholder="https://"/>
+        <button onClick={onSave} disabled={saving || !f("name")} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
+          {saving ? "Saving..." : "Save Card"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Log Payment ────────────────────────────────────────
+function PayModal({ item, form, setForm, saving, onPay, onPTP, onClose, accent }: {
+  item: UpcomingItem; form: Record<string,string>;
+  setForm: React.Dispatch<React.SetStateAction<Record<string,string>>>;
+  saving: boolean; onPay: () => void; onPTP: () => void; onClose: () => void; accent: string;
+}) {
+  const f = (k: string) => form[k] ?? "";
+  const sf = (k: string) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  const isPTP = form.action === "ptp";
+  const isPay = form.action === "pay" || !form.action;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>{item.name}</div>
+            <div style={{ fontSize: 11, color: "#B8A8A8" }}>Due {fmtDate(item.due_date)} · {fmt(item.anticipated_amount)}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[{ id: "pay", label: "💰 Log Payment" }, { id: "ptp", label: "📅 Promise to Pay" }].map(tab => (
+            <button key={tab.id} onClick={() => sf("action")(tab.id)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${(form.action ?? "pay") === tab.id ? accent : "#EDE0D8"}`, background: (form.action ?? "pay") === tab.id ? accent + "15" : "#fff", fontSize: 12, fontWeight: 700, color: (form.action ?? "pay") === tab.id ? accent : "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {isPay && (
+          <>
+            <FormInput label="Payment Date" value={f("paid_date")} onChange={sf("paid_date")} type="date"/>
+            <FormInput label="Amount Paid" value={f("actual_amount")} onChange={sf("actual_amount")} type="number" placeholder={String(item.anticipated_amount ?? "")}/>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 8 }}>Payment Type</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[{ id: "true", label: "Paid in Full" }, { id: "false", label: "Partial Payment" }].map(opt => (
+                  <button key={opt.id} onClick={() => sf("paid_full")(opt.id)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1.5px solid ${(form.paid_full ?? "true") === opt.id ? accent : "#EDE0D8"}`, background: (form.paid_full ?? "true") === opt.id ? accent + "15" : "#fff", fontSize: 12, fontWeight: 700, color: (form.paid_full ?? "true") === opt.id ? accent : "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 10, padding: "10px 12px", border: "1px solid #EDE0D8", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#B8A8A8", marginBottom: 8 }}>ADD FEE (optional)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <FormInput label="Fee Type" value={f("fee_type")} onChange={sf("fee_type")} placeholder="late_fee, penalty..."/>
+                <FormInput label="Fee Amount" value={f("fee_amount")} onChange={sf("fee_amount")} type="number" placeholder="0.00"/>
+              </div>
+            </div>
+          </>
+        )}
+        {isPTP && (
+          <>
+            <FormInput label="Promise to Pay Date" value={f("promise_to_pay_date")} onChange={sf("promise_to_pay_date")} type="date"/>
+            <FormInput label="2nd Promise Date (if needed)" value={f("promise_to_pay_date_2")} onChange={sf("promise_to_pay_date_2")} type="date"/>
+            <FormInput label="Notes" value={f("promise_notes")} onChange={sf("promise_notes")} placeholder="Why payment is delayed..."/>
+          </>
+        )}
+        <button onClick={isPTP ? onPTP : onPay} disabled={saving} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+          {saving ? "Saving..." : isPTP ? "Set Promise to Pay" : "Log Payment"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 export default function FinancesPage() {
   const { theme } = useTheme();
   const accent = theme.accent;
@@ -289,6 +451,29 @@ export default function FinancesPage() {
       setForm({});
       await Promise.all([loadCards(), loadDashboard()]);
     }
+    setSaving(false);
+  };
+
+
+  const handlePTP = async () => {
+    if (!payModal) return;
+    setSaving(true);
+    if (payModal.id) {
+      await fetch("/api/finances/instances", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instance_id: payModal.id,
+          status: "promise_to_pay",
+          promise_to_pay_date: form.promise_to_pay_date,
+          promise_to_pay_date_2: form.promise_to_pay_date_2,
+          promise_notes: form.promise_notes,
+        }),
+      });
+    }
+    setPayModal(null);
+    setForm({});
+    await loadUpcoming();
     setSaving(false);
   };
 
@@ -631,176 +816,6 @@ export default function FinancesPage() {
       badge: (upcoming?.past_due?.length ?? 0) > 0 ? upcoming?.past_due?.length : null },
   ] as const;
 
-  // ── Modal: Add Bill ───────────────────────────────
-  const AddBillModal = () => (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>Add Account</div>
-          <button onClick={() => { setAddModal(null); setForm({}); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
-        </div>
-        <Select label="Category" k="category" options={CATEGORIES.filter(c => c.id !== "credit_cards").map(c => ({ id: c.id, label: `${c.icon} ${c.label}` }))}/>
-        <Input label="Account Name" k="name" placeholder="e.g. Electric Bill"/>
-        <Select label="Frequency" k="frequency" options={FREQUENCIES}/>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Anticipated Amount" k="anticipated_amount" type="number" placeholder="0.00"/>
-          <Input label="Budget Amount" k="budget_amount" type="number" placeholder="0.00"/>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Day of Month Due" k="day_of_month" type="number" placeholder="1-31"/>
-          <Input label="Start Date" k="start_date" type="date"/>
-        </div>
-        <Input label="Payee Name" k="payee_name" placeholder="Company name"/>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Phone" k="phone" placeholder="555-000-0000"/>
-          <Input label="Website" k="website" placeholder="https://"/>
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>🔒 Credentials (encrypted)</div>
-        <Input label="Account Number" k="account_number" placeholder="Account #"/>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Username" k="username" placeholder="Login username"/>
-          <Input label="Password" k="password" placeholder="Login password"/>
-        </div>
-        <Input label="Notes" k="notes" placeholder="Any additional notes"/>
-        <button onClick={handleSaveBill} disabled={saving || !f("name") || !f("category")} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
-          {saving ? "Saving..." : "Save Account"}
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Modal: Add Credit Card ────────────────────────
-  const AddCardModal = () => (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>Add Credit Card</div>
-          <button onClick={() => { setAddModal(null); setForm({}); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
-        </div>
-        <Input label="Card Name" k="name" placeholder="e.g. Chase Sapphire"/>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Issuer" k="issuer" placeholder="Chase, Citi, Amex..."/>
-          <Input label="Card Type" k="card_type" placeholder="Visa, MC, Amex..."/>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Credit Limit" k="credit_limit" type="number" placeholder="0.00"/>
-          <Input label="APR (%)" k="apr" type="number" placeholder="0.00"/>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Minimum Payment" k="minimum_payment" type="number" placeholder="0.00"/>
-          <Input label="Planned Payment" k="anticipated_payment" type="number" placeholder="0.00"/>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Statement Day" k="statement_day" type="number" placeholder="1-31"/>
-          <Input label="Due Day" k="due_day" type="number" placeholder="1-31"/>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Last 4 Digits" k="last_four" placeholder="0000"/>
-          <Input label="Rewards Program" k="rewards_program" placeholder="Points, Miles..."/>
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>🔒 Credentials (encrypted)</div>
-        <Input label="Account Number" k="account_number" placeholder="Full account number"/>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Username" k="username" placeholder="Online login"/>
-          <Input label="Password" k="password" placeholder="Online password"/>
-        </div>
-        <Input label="Website" k="website" placeholder="https://"/>
-        <button onClick={handleSaveCard} disabled={saving || !f("name")} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
-          {saving ? "Saving..." : "Save Card"}
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Modal: Log Payment ────────────────────────────
-  const PayModal = () => {
-    if (!payModal) return null;
-    const isPTP = form.action === "ptp";
-    const isPay = form.action === "pay" || !form.action;
-
-    return (
-      <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
-        <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "#3D2C2C", fontFamily: "'Fraunces',serif" }}>{payModal.name}</div>
-              <div style={{ fontSize: 11, color: "#B8A8A8" }}>Due {fmtDate(payModal.due_date)} · {fmt(payModal.anticipated_amount)}</div>
-            </div>
-            <button onClick={() => { setPayModal(null); setForm({}); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#B8A8A8" }}>×</button>
-          </div>
-
-          {/* Action tabs */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {[{ id: "pay", label: "💰 Log Payment" }, { id: "ptp", label: "📅 Promise to Pay" }].map(tab => (
-              <button key={tab.id} onClick={() => sf("action")(tab.id)} style={{ flex: 1, padding: "10px", borderRadius: 10, border: `1.5px solid ${(form.action ?? "pay") === tab.id ? accent : "#EDE0D8"}`, background: (form.action ?? "pay") === tab.id ? accent + "15" : "#fff", fontSize: 12, fontWeight: 700, color: (form.action ?? "pay") === tab.id ? accent : "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {isPay && (
-            <>
-              <Input label="Payment Date" k="paid_date" type="date"/>
-              <Input label="Amount Paid" k="actual_amount" type="number" placeholder={String(payModal.anticipated_amount ?? "")}/>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 8 }}>Payment Type</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {[{ id: "true", label: "Paid in Full" }, { id: "false", label: "Partial Payment" }].map(opt => (
-                    <button key={opt.id} onClick={() => sf("paid_full")(opt.id)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1.5px solid ${(form.paid_full ?? "true") === opt.id ? accent : "#EDE0D8"}`, background: (form.paid_full ?? "true") === opt.id ? accent + "15" : "#fff", fontSize: 12, fontWeight: 700, color: (form.paid_full ?? "true") === opt.id ? accent : "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Fee section */}
-              <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 10, padding: "10px 12px", border: "1px solid #EDE0D8", marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#B8A8A8", marginBottom: 8 }}>ADD FEE (optional)</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <Input label="Fee Type" k="fee_type" placeholder="late_fee, penalty..."/>
-                  <Input label="Fee Amount" k="fee_amount" type="number" placeholder="0.00"/>
-                </div>
-              </div>
-            </>
-          )}
-
-          {isPTP && (
-            <>
-              <Input label="Promise to Pay Date" k="promise_to_pay_date" type="date"/>
-              <Input label="2nd Promise Date (if needed)" k="promise_to_pay_date_2" type="date"/>
-              <Input label="Notes" k="promise_notes" placeholder="Why payment is delayed..."/>
-            </>
-          )}
-
-          <button
-            onClick={isPTP ? async () => {
-              setSaving(true);
-              if (payModal.id) {
-                await fetch("/api/finances/instances", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    instance_id: payModal.id,
-                    status: "promise_to_pay",
-                    promise_to_pay_date: form.promise_to_pay_date,
-                    promise_to_pay_date_2: form.promise_to_pay_date_2,
-                    promise_notes: form.promise_notes,
-                  }),
-                });
-              }
-              setPayModal(null);
-              setForm({});
-              await loadUpcoming();
-              setSaving(false);
-            } : handleLogPayment}
-            disabled={saving}
-            style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit" }}
-          >
-            {saving ? "Saving..." : isPTP ? "Set Promise to Pay" : "Log Payment"}
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   // ── Render ────────────────────────────────────────
   return (
@@ -864,9 +879,9 @@ export default function FinancesPage() {
       )}
 
       {/* Modals */}
-      {addModal === "bill" && <AddBillModal/>}
-      {addModal === "card" && <AddCardModal/>}
-      {payModal && <PayModal/>}
+      {addModal === "bill" && <AddBillModal form={form} setForm={setForm} saving={saving} onSave={handleSaveBill} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
+      {addModal === "card" && <AddCardModal form={form} setForm={setForm} saving={saving} onSave={handleSaveCard} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
+      {payModal && <PayModal item={payModal} form={form} setForm={setForm} saving={saving} onPay={handleLogPayment} onPTP={handlePTP} onClose={() => { setPayModal(null); setForm({}); }} accent={accent}/>}
     </div>
   );
 }
