@@ -2,7 +2,7 @@
 // Manage bill payment instances — log payments, add fees, promise-to-pay
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase";
+import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
 import { getSessionMember, checkPermission } from "@/lib/permissions";
 
 // POST /api/finances/instances — create or update a payment instance

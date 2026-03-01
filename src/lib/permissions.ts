@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { getServerSession } from "next-auth";
-import supabaseServer from "./supabase";
+import { supabaseAdmin as supabaseServer } from "./supabase";
 
 export type MemberRole = "owner" | "admin" | "member" | "child";
 export type ResourceType =

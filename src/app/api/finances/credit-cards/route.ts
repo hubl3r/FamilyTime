@@ -1,6 +1,6 @@
 // src/app/api/finances/credit-cards/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase";
+import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
 import { getSessionMember } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 
