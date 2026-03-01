@@ -2,9 +2,7 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-
-// In-memory store — swap for Supabase later
-const users: { id: string; email: string; password: string; name: string }[] = [];
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -18,23 +16,41 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
+        const email = credentials.email.toLowerCase().trim();
+
         if (credentials.action === "register") {
-          const exists = users.find(u => u.email === credentials.email);
-          if (exists) throw new Error("Email already registered");
+          // Check if already exists
+          const { data: existing } = await supabaseAdmin
+            .from("users")
+            .select("id")
+            .eq("email", email)
+            .single();
+          if (existing) throw new Error("Email already registered");
+
+          // Hash and store
           const hashed = await bcrypt.hash(credentials.password, 10);
-          const user = {
-            id: Date.now().toString(),
-            email: credentials.email,
-            password: hashed,
-            name: credentials.name || credentials.email.split("@")[0],
-          };
-          users.push(user);
+          const name = credentials.name || email.split("@")[0];
+          const { data: user, error } = await supabaseAdmin
+            .from("users")
+            .insert({ email, password: hashed, name })
+            .select()
+            .single();
+          if (error || !user) throw new Error("Failed to create account");
+
           return { id: user.id, email: user.email, name: user.name };
+
         } else {
-          const user = users.find(u => u.email === credentials.email);
+          // Login
+          const { data: user } = await supabaseAdmin
+            .from("users")
+            .select("id, email, name, password")
+            .eq("email", email)
+            .single();
           if (!user) throw new Error("No account found");
+
           const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) throw new Error("Incorrect password");
+
           return { id: user.id, email: user.email, name: user.name };
         }
       },

@@ -33,7 +33,7 @@ export async function getSessionMember(): Promise<SessionMember | null> {
   const { data, error } = await supabaseServer
     .from("family_members")
     .select("id, family_id, role, email, first_name")
-    .eq("email", session.user.email)
+    .eq("email", session.user.email.toLowerCase().trim())
     .eq("is_active", true)
     .single();
 
