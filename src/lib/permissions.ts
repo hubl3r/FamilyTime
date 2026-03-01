@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { supabaseAdmin as supabaseServer } from "./supabase";
 
 export type MemberRole = "owner" | "admin" | "member" | "child";
@@ -26,7 +27,7 @@ export interface SessionMember {
  * Returns null if not authenticated or not in a family.
  */
 export async function getSessionMember(): Promise<SessionMember | null> {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) return null;
 
   const { data, error } = await supabaseServer

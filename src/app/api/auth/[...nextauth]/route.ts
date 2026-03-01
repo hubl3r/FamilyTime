@@ -1,12 +1,12 @@
 // src/app/api/auth/[...nextauth]/route.ts
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 // In-memory store — swap for Supabase later
 const users: { id: string; email: string; password: string; name: string }[] = [];
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -43,6 +43,7 @@ const handler = NextAuth({
   pages:   { signIn: "/sign-in" },
   session: { strategy: "jwt" },
   secret:  process.env.NEXTAUTH_SECRET,
-});
+};
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
