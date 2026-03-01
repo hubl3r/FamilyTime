@@ -30,6 +30,12 @@
   --nav-height:   68px;
   --radius:       16px;
   --radius-sm:    10px;
+
+  /* Theme-controlled — overridden at runtime by ThemeContext */
+  --accent:        #E8A5A5;
+  --accent-soft:   rgba(232,165,165,0.13);
+  --nav-bg:        #FDF8F4;
+  --font-size-base: 14px;
 }
 
 body {
