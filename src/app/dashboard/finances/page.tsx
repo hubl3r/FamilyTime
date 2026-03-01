@@ -1,6 +1,6 @@
 // src/app/dashboard/finances/page.tsx
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useTheme } from "@/components/ThemeContext";
 
 // ── Types ─────────────────────────────────────────────────────
