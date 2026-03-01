@@ -367,6 +367,161 @@ function PayModal({ item, form, setForm, saving, onPay, onPTP, onClose, accent }
 }
 
 
+// ── Detail Row helper ─────────────────────────────────────────
+function DetailRow({ label, value, href }: { label: string; value: string; href?: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #EDE0D8" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8" }}>{label}</div>
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "#A8C8E8", fontWeight: 600, textDecoration: "none" }}>{value}</a>
+      ) : (
+        <div style={{ fontSize: 13, color: "#3D2C2C", fontWeight: 600, textAlign: "right", maxWidth: "60%" }}>{value}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Modal: Bill Detail / Edit / Delete ────────────────────────
+function BillDetailModal({ bill, form, setForm, saving, onClose, onDelete, onSave, accent }: {
+  bill: Bill; form: Record<string,string>;
+  setForm: React.Dispatch<React.SetStateAction<Record<string,string>>>;
+  saving: boolean; onClose: () => void;
+  onDelete: (id: string) => void;
+  onSave: (id: string) => void;
+  accent: string;
+}) {
+  const [tab, setTab] = React.useState<"details"|"credentials"|"edit">("details");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const f = (k: string) => form[k] ?? ((bill as unknown as Record<string,unknown>)[k]?.toString() ?? "");
+  const sf = (k: string) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  const catInfo = CATEGORIES.find(c => c.id === bill.category);
+  const freqLabel = FREQUENCIES.find(fr => fr.id === bill.frequency)?.label ?? bill.frequency;
+  const fmt = (n: number | null | undefined) => n == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  const fmtDate = (d: string | null | undefined) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: "#FDF8F4", borderRadius: "20px 20px 0 0", width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ padding: "20px 20px 0", flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#B8A8A8", fontWeight: 600, marginBottom: 2 }}>{catInfo?.icon} {catInfo?.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#3D2C2C", fontFamily: "Fraunces,serif" }}>{bill.name}</div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#B8A8A8", marginLeft: 8 }}>x</button>
+          </div>
+          <div style={{ display: "flex", gap: 16, marginBottom: 16, marginTop: 8 }}>
+            <div><div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C" }}>{fmt(bill.anticipated_amount)}</div><div style={{ fontSize: 10, color: "#B8A8A8", fontWeight: 600 }}>ANTICIPATED</div></div>
+            <div><div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C" }}>{freqLabel}</div><div style={{ fontSize: 10, color: "#B8A8A8", fontWeight: 600 }}>FREQUENCY</div></div>
+            {bill.day_of_month && <div><div style={{ fontSize: 18, fontWeight: 800, color: "#3D2C2C" }}>Day {bill.day_of_month}</div><div style={{ fontSize: 10, color: "#B8A8A8", fontWeight: 600 }}>DUE</div></div>}
+          </div>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.04)", borderRadius: 10, padding: 3 }}>
+            {(["details","credentials","edit"] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "7px 4px", borderRadius: 8, border: "none", background: tab === t ? "#fff" : "transparent", fontSize: 11, fontWeight: 700, color: tab === t ? "#3D2C2C" : "#B8A8A8", cursor: "pointer", textTransform: "capitalize", boxShadow: tab === t ? "0 1px 4px rgba(61,44,44,0.1)" : "none", fontFamily: "inherit" }}>
+                {t === "details" ? "Details" : t === "credentials" ? "Login" : "Edit"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ overflowY: "auto", padding: "16px 20px 40px", flex: 1 }}>
+          {tab === "details" && (
+            <div>
+              {bill.payee_name && <DetailRow label="Payee" value={bill.payee_name}/>}
+              {bill.phone && <DetailRow label="Phone" value={bill.phone} href={"tel:" + bill.phone}/>}
+              {bill.website && <DetailRow label="Website" value={bill.website} href={bill.website}/>}
+              {bill.notes && <DetailRow label="Notes" value={bill.notes}/>}
+              <DetailRow label="Autopay" value={bill.is_autopay ? "Yes" : "No"}/>
+              <DetailRow label="Started" value={fmtDate(bill.start_date)}/>
+              {(bill.instances ?? []).length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", marginBottom: 10 }}>Payment History</div>
+                  {[...(bill.instances ?? [])].sort((a,b) => b.due_date?.localeCompare(a.due_date) ?? 0).slice(0, 6).map((inst, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #EDE0D8" }}>
+                      <div><div style={{ fontSize: 12, fontWeight: 700, color: "#3D2C2C" }}>{fmtDate(inst.due_date)}</div><StatusBadge status={inst.status}/></div>
+                      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: inst.actual_amount != null ? "#A8C5A0" : "#B8A8A8" }}>
+                        {inst.actual_amount != null ? fmt(inst.actual_amount) + " paid" : fmt(inst.anticipated_amount) + " due"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 24 }}>
+                {!confirmDelete ? (
+                  <button onClick={() => setConfirmDelete(true)} style={{ width: "100%", padding: 12, background: "#FFF0F0", border: "1.5px solid #E8A5A560", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "#C97B7B", cursor: "pointer", fontFamily: "inherit" }}>
+                    Remove Account
+                  </button>
+                ) : (
+                  <div style={{ background: "#FFF0F0", border: "1.5px solid #E8A5A5", borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#C97B7B", marginBottom: 12, textAlign: "center" }}>Remove this account?</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: 10, background: "#fff", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                      <button onClick={() => onDelete(bill.id)} disabled={saving} style={{ flex: 1, padding: 10, background: "#E8A5A5", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>Delete</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {tab === "credentials" && (
+            <div>
+              {bill.credentials ? (
+                <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 12, padding: 14, border: "1px solid #EDE0D8" }}>
+                  <RevealField label="Account Number" value={bill.credentials.account_number}/>
+                  <RevealField label="Username" value={bill.credentials.username}/>
+                  <RevealField label="Password" value={bill.credentials.password}/>
+                  <RevealField label="PIN" value={bill.credentials.pin}/>
+                  {bill.credentials.website && <DetailRow label="Website" value={bill.credentials.website} href={bill.credentials.website}/>}
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: 40, color: "#B8A8A8" }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>No credentials saved</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>Switch to Edit tab to add them</div>
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "edit" && (
+            <div>
+              <FormSelect label="Category" value={f("category")} onChange={sf("category")} options={CATEGORIES.filter(c => c.id !== "credit_cards").map(c => ({ id: c.id, label: c.icon + " " + c.label }))}/>
+              <FormInput label="Account Name" value={f("name")} onChange={sf("name")} placeholder="e.g. Electric Bill"/>
+              <FormSelect label="Frequency" value={f("frequency")} onChange={sf("frequency")} options={FREQUENCIES}/>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <FormInput label="Anticipated Amount" value={f("anticipated_amount")} onChange={sf("anticipated_amount")} type="number" placeholder="0.00"/>
+                <FormInput label="Budget Amount" value={f("budget_amount")} onChange={sf("budget_amount")} type="number" placeholder="0.00"/>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <FormInput label="Day of Month Due" value={f("day_of_month")} onChange={sf("day_of_month")} type="number" placeholder="1-31"/>
+                <FormInput label="Start Date" value={f("start_date")} onChange={sf("start_date")} type="date"/>
+              </div>
+              <FormInput label="Payee Name" value={f("payee_name")} onChange={sf("payee_name")} placeholder="Company name"/>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <FormInput label="Phone" value={f("phone")} onChange={sf("phone")} placeholder="555-000-0000"/>
+                <FormInput label="Website" value={f("website")} onChange={sf("website")} placeholder="https://"/>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>Credentials (encrypted)</div>
+              <FormInput label="Account Number" value={f("account_number")} onChange={sf("account_number")} placeholder="Account #"/>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <FormInput label="Username" value={f("username")} onChange={sf("username")} placeholder="Login username"/>
+                <FormInput label="Password" value={f("password")} onChange={sf("password")} placeholder="Login password"/>
+              </div>
+              <FormInput label="Notes" value={f("notes")} onChange={sf("notes")} placeholder="Any additional notes"/>
+              <button onClick={() => onSave(bill.id)} disabled={saving} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function FinancesPage() {
   const { theme } = useTheme();
   const accent = theme.accent;
@@ -454,6 +609,25 @@ export default function FinancesPage() {
     setSaving(false);
   };
 
+
+
+  const handleEditBill = async (id: string) => {
+    setSaving(true);
+    const res = await fetch(`/api/finances/bills/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    });
+    if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
+    setSaving(false);
+  };
+
+  const handleDeleteBill = async (id: string) => {
+    setSaving(true);
+    const res = await fetch(`/api/finances/bills/${id}`, { method: 'DELETE' });
+    if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
+    setSaving(false);
+  };
 
   const handlePTP = async () => {
     if (!payModal) return;
@@ -882,6 +1056,7 @@ export default function FinancesPage() {
       {addModal === "bill" && <AddBillModal form={form} setForm={setForm} saving={saving} onSave={handleSaveBill} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {addModal === "card" && <AddCardModal form={form} setForm={setForm} saving={saving} onSave={handleSaveCard} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {payModal && <PayModal item={payModal} form={form} setForm={setForm} saving={saving} onPay={handleLogPayment} onPTP={handlePTP} onClose={() => { setPayModal(null); setForm({}); }} accent={accent}/>}
+      {"category" in (detailItem ?? {}) && detailItem && <BillDetailModal bill={detailItem as Bill} form={form} setForm={setForm} saving={saving} onClose={() => { setDetailItem(null); setForm({}); }} onDelete={handleDeleteBill} onSave={handleEditBill} accent={accent}/>}
     </div>
   );
 }
