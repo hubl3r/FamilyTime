@@ -1,0 +1,74 @@
+FamilyTime - Session Transfer Package
+Generated: Sat Feb 28 09:56:54 PM AKST 2026
+Live URL:  https://hubler.vercel.app
+Repo:      https://github.com/hubl3r/FamilyTime.git
+Stack:     Next.js 16 + NextAuth + Supabase + Vercel
+------------------------------------------------
+CURRENT STATE:
+- Auth: NextAuth with email/password (in-memory, needs Supabase)
+- StylePicker: built but not yet wired to app CSS variables
+- Finances module: mock data, needs Supabase backend
+- Documents module: mock data, needs Supabase backend
+- Stub modules: chores, meals, prayer, events, members
+
+NEXT PRIORITIES:
+- Wire StylePicker to apply CSS variables across app
+- Build Supabase backend for auth, finances, documents
+- Financial tracker: accounts, credit cards, loans, amortization
+
+------------------------------------------------
+FILE TREE:
+.
+./.env.local
+./.env.local.template
+./.git
+./.gitignore
+./.next
+./next.config.ts
+./next-env.d.ts
+./node_modules
+./package.json
+./package-lock.json
+./package_session.bat
+./package_session.sh
+./PROJECT_TREE.txt
+./src
+./src/app
+./src/app/api
+./src/app/api/auth
+./src/app/api/auth/[...nextauth]
+./src/app/api/auth/[...nextauth]/route.ts
+./src/app/dashboard
+./src/app/dashboard/chores
+./src/app/dashboard/chores/page.tsx
+./src/app/dashboard/documents
+./src/app/dashboard/documents/page.tsx
+./src/app/dashboard/events
+./src/app/dashboard/events/page.tsx
+./src/app/dashboard/finances
+./src/app/dashboard/finances/page.tsx
+./src/app/dashboard/layout.tsx
+./src/app/dashboard/meals
+./src/app/dashboard/meals/page.tsx
+./src/app/dashboard/members
+./src/app/dashboard/members/page.tsx
+./src/app/dashboard/page.tsx
+./src/app/dashboard/prayer
+./src/app/dashboard/prayer/page.tsx
+./src/app/dashboard/settings
+./src/app/dashboard/settings/page.tsx
+./src/app/globals.css
+./src/app/layout.tsx
+./src/app/page.tsx
+./src/app/sign-in
+./src/app/sign-in/page.tsx
+./src/components
+./src/components/BottomNav.tsx
+./src/components/SignOutButton.tsx
+./src/components/StylePicker.tsx
+./src/lib
+./src/lib/supabase.ts
+./src/middleware.ts
+./src/types
+./supabase
+./tsconfig.json
