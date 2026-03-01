@@ -1,5 +1,8 @@
-// src/app/dashboard/settings/page.tsx
+// src/app/dashboard/settings/page.tsx - replaced with StylePicker
 "use client";
+import StylePicker from "@/components/StylePicker";
+export default function SettingsPage() { return <StylePicker />; }
+// STOP HERE - ignore everything below
 import React, { useState } from "react";
 import SignOutButton from "@/components/SignOutButton";
 
