@@ -307,7 +307,7 @@ export default function LandingPage() {
                 borderColor: i === active ? f.color + "50" : "#E0DDD8",
                 color: i === active ? f.color : "#6B6B6B",
               }}>
-                <FIcon size={14} strokeWidth={2.5}/> {f.label}
+                <FIcon/> {f.label}
               </button>
             );
           })}
