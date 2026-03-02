@@ -4,14 +4,15 @@ import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
 import { getSessionMember, checkPermission } from "@/lib/permissions";
 import { encryptCredentials, decryptCredentials } from "@/lib/crypto";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 // GET /api/finances/bills/[id] — get single bill with credentials
 export async function GET(_req: NextRequest, { params }: Params) {
+  const { id } = await params;
   const member = await getSessionMember();
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const canView = await checkPermission(member, "bill", params.id, "can_view");
+  const canView = await checkPermission(member, "bill", id, "can_view");
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { data: bill, error } = await supabaseServer
@@ -26,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         fees:bill_fees(id, fee_type, amount, is_percentage, description, assessed_date, waived)
       )
     `)
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("family_id", member.family_id)
     .single();
 
@@ -37,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .from("encrypted_credentials")
     .select("account_number, username, password, pin, website, phone, notes")
     .eq("resource_type", "bill")
-    .eq("resource_id", params.id)
+    .eq("resource_id", id)
     .single();
 
   const decrypted = creds ? decryptCredentials(creds) : null;
@@ -55,10 +56,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 // PATCH /api/finances/bills/[id] — update a bill
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const { id } = await params;
   const member = await getSessionMember();
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const canEdit = await checkPermission(member, "bill", params.id, "can_edit");
+  const canEdit = await checkPermission(member, "bill", id, "can_edit");
   if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
@@ -67,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { data, error } = await supabaseServer
     .from("bills")
     .update({ ...billFields, updated_by: member.id, updated_at: new Date().toISOString() })
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("family_id", member.family_id)
     .select()
     .single();
@@ -82,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .upsert({
         family_id:     member.family_id,
         resource_type: "bill",
-        resource_id:   params.id,
+        resource_id:   id,
         ...encrypted,
         website, phone,
         updated_by: member.id,
@@ -95,16 +97,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 // DELETE /api/finances/bills/[id] — soft delete (set is_active = false)
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  const { id } = await params;
   const member = await getSessionMember();
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const canDelete = await checkPermission(member, "bill", params.id, "can_delete");
+  const canDelete = await checkPermission(member, "bill", id, "can_delete");
   if (!canDelete) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { error } = await supabaseServer
     .from("bills")
     .update({ is_active: false, updated_by: member.id, updated_at: new Date().toISOString() })
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("family_id", member.family_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
