@@ -125,7 +125,8 @@ export async function GET(req: NextRequest) {
       const dateStr = date.toISOString().split("T")[0];
       // Check if an instance already exists for this date
       const existing = (bill.instances ?? []).find(
-        (i: { scheduled_date: string }) => i.scheduled_date === dateStr
+        (i: { scheduled_date?: string; due_date?: string }) =>
+          i.scheduled_date === dateStr || i.due_date === dateStr
       );
 
       upcomingItems.push({
