@@ -382,22 +382,38 @@ function DetailRow({ label, value, href }: { label: string; value: string; href?
 }
 
 // ── Modal: Bill Detail / Edit / Delete ────────────────────────
-function BillDetailModal({ bill, form, setForm, saving, onClose, onDelete, onSave, accent }: {
-  bill: Bill; form: Record<string,string>;
-  setForm: React.Dispatch<React.SetStateAction<Record<string,string>>>;
-  saving: boolean; onClose: () => void;
+function BillDetailModal({ bill, onClose, onDelete, onSave, accent }: {
+  bill: Bill;
+  saving?: boolean; onClose: () => void;
   onDelete: (id: string) => void;
-  onSave: (id: string) => void;
+  onSave: (id: string, data: Record<string,string>) => void;
   accent: string;
 }) {
   const [tab, setTab] = React.useState<"details"|"credentials"|"edit">("details");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const f = (k: string) => form[k] ?? ((bill as unknown as Record<string,unknown>)[k]?.toString() ?? "");
-  const sf = (k: string) => (v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  const [saving, setSaving] = React.useState(false);
+  // Initialize edit form with bill values
+  const [editForm, setEditForm] = React.useState<Record<string,string>>({
+    name:               bill.name ?? "",
+    category:           bill.category ?? "",
+    frequency:          bill.frequency ?? "",
+    anticipated_amount: bill.anticipated_amount?.toString() ?? "",
+    budget_amount:      bill.budget_amount?.toString() ?? "",
+    day_of_month:       bill.day_of_month?.toString() ?? "",
+    start_date:         bill.start_date ?? "",
+    payee_name:         bill.payee_name ?? "",
+    phone:              bill.phone ?? "",
+    website:            bill.website ?? "",
+    notes:              bill.notes ?? "",
+    is_autopay:         bill.is_autopay ? "true" : "false",
+  });
+  const f = (k: string) => editForm[k] ?? "";
+  const sf = (k: string) => (v: string) => setEditForm(prev => ({ ...prev, [k]: v }));
   const catInfo = CATEGORIES.find(c => c.id === bill.category);
   const freqLabel = FREQUENCIES.find(fr => fr.id === bill.frequency)?.label ?? bill.frequency;
   const fmt = (n: number | null | undefined) => n == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
   const fmtDate = (d: string | null | undefined) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+  const handleSave = async () => { setSaving(true); await onSave(bill.id, editForm); setSaving(false); };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end" }}>
@@ -436,30 +452,42 @@ function BillDetailModal({ bill, form, setForm, saving, onClose, onDelete, onSav
               {bill.notes && <DetailRow label="Notes" value={bill.notes}/>}
               <DetailRow label="Autopay" value={bill.is_autopay ? "Yes" : "No"}/>
               <DetailRow label="Started" value={fmtDate(bill.start_date)}/>
-              {(bill.instances ?? []).length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", marginBottom: 10 }}>Payment History</div>
-                  {[...(bill.instances ?? [])].sort((a,b) => b.due_date?.localeCompare(a.due_date) ?? 0).slice(0, 6).map((inst, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #EDE0D8" }}>
-                      <div><div style={{ fontSize: 12, fontWeight: 700, color: "#3D2C2C" }}>{fmtDate(inst.due_date)}</div><StatusBadge status={inst.status}/></div>
-                      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: inst.actual_amount != null ? "#A8C5A0" : "#B8A8A8" }}>
-                        {inst.actual_amount != null ? fmt(inst.actual_amount) + " paid" : fmt(inst.anticipated_amount) + " due"}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", marginBottom: 10 }}>Transaction History</div>
+                {(bill.instances ?? []).length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "20px 0", color: "#B8A8A8", fontSize: 12 }}>No transactions yet — log a payment from the Upcoming tab</div>
+                ) : (
+                  [...(bill.instances ?? [])].sort((a,b) => b.due_date?.localeCompare(a.due_date) ?? 0).slice(0, 12).map((inst, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #EDE0D8" }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#3D2C2C" }}>{fmtDate(inst.due_date)}</div>
+                        <div style={{ marginTop: 2 }}><StatusBadge status={inst.status}/></div>
+                        {inst.promise_to_pay_date && <div style={{ fontSize: 10, color: "#B5A8D4", marginTop: 2 }}>Promise: {fmtDate(inst.promise_to_pay_date)}</div>}
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {inst.actual_amount != null
+                          ? <div style={{ fontSize: 13, fontWeight: 700, color: "#A8C5A0" }}>{fmt(inst.actual_amount)} paid</div>
+                          : <div style={{ fontSize: 13, fontWeight: 700, color: "#B8A8A8" }}>{fmt(inst.anticipated_amount)} due</div>
+                        }
+                        {inst.remaining_balance != null && inst.remaining_balance > 0 && (
+                          <div style={{ fontSize: 11, color: "#E8A5A5" }}>{fmt(inst.remaining_balance)} remaining</div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
               <div style={{ marginTop: 24 }}>
                 {!confirmDelete ? (
                   <button onClick={() => setConfirmDelete(true)} style={{ width: "100%", padding: 12, background: "#FFF0F0", border: "1.5px solid #E8A5A560", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "#C97B7B", cursor: "pointer", fontFamily: "inherit" }}>
-                    Remove Account
+                    🗑️ Remove Account
                   </button>
                 ) : (
                   <div style={{ background: "#FFF0F0", border: "1.5px solid #E8A5A5", borderRadius: 12, padding: 16 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#C97B7B", marginBottom: 12, textAlign: "center" }}>Remove this account?</div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: 10, background: "#fff", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                      <button onClick={() => onDelete(bill.id)} disabled={saving} style={{ flex: 1, padding: 10, background: "#E8A5A5", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>Delete</button>
+                      <button onClick={() => onDelete(bill.id)} style={{ flex: 1, padding: 10, background: "#E8A5A5", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>Delete</button>
                     </div>
                   </div>
                 )}
@@ -503,14 +531,25 @@ function BillDetailModal({ bill, form, setForm, saving, onClose, onDelete, onSav
                 <FormInput label="Phone" value={f("phone")} onChange={sf("phone")} placeholder="555-000-0000"/>
                 <FormInput label="Website" value={f("website")} onChange={sf("website")} placeholder="https://"/>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>Credentials (encrypted)</div>
+              {/* Autopay toggle */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 8 }}>Autopay</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[{ id: "true", label: "✅ Yes — Autopay On" }, { id: "false", label: "❌ No — Manual Pay" }].map(opt => (
+                    <button key={opt.id} onClick={() => sf("is_autopay")(opt.id)} style={{ flex: 1, padding: "10px 6px", borderRadius: 10, border: "1.5px solid " + (f("is_autopay") === opt.id ? accent : "#EDE0D8"), background: f("is_autopay") === opt.id ? accent + "15" : "#fff", fontSize: 11, fontWeight: 700, color: f("is_autopay") === opt.id ? accent : "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", margin: "16px 0 10px", paddingTop: 12, borderTop: "1px solid #EDE0D8" }}>🔒 Credentials (encrypted)</div>
               <FormInput label="Account Number" value={f("account_number")} onChange={sf("account_number")} placeholder="Account #"/>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <FormInput label="Username" value={f("username")} onChange={sf("username")} placeholder="Login username"/>
                 <FormInput label="Password" value={f("password")} onChange={sf("password")} placeholder="Login password"/>
               </div>
               <FormInput label="Notes" value={f("notes")} onChange={sf("notes")} placeholder="Any additional notes"/>
-              <button onClick={() => onSave(bill.id)} disabled={saving} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
+              <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: 14, background: saving ? "#EDE0D8" : accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "not-allowed" : "pointer", marginTop: 8, fontFamily: "inherit" }}>
                 {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>
@@ -611,15 +650,13 @@ export default function FinancesPage() {
 
 
 
-  const handleEditBill = async (id: string) => {
-    setSaving(true);
+  const handleEditBill = async (id: string, data?: Record<string,string>) => {
     const res = await fetch(`/api/finances/bills/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(data ?? form),
     });
     if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
-    setSaving(false);
   };
 
   const handleDeleteBill = async (id: string) => {
@@ -1056,7 +1093,7 @@ export default function FinancesPage() {
       {addModal === "bill" && <AddBillModal form={form} setForm={setForm} saving={saving} onSave={handleSaveBill} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {addModal === "card" && <AddCardModal form={form} setForm={setForm} saving={saving} onSave={handleSaveCard} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {payModal && <PayModal item={payModal} form={form} setForm={setForm} saving={saving} onPay={handleLogPayment} onPTP={handlePTP} onClose={() => { setPayModal(null); setForm({}); }} accent={accent}/>}
-      {"category" in (detailItem ?? {}) && detailItem && <BillDetailModal bill={detailItem as Bill} form={form} setForm={setForm} saving={saving} onClose={() => { setDetailItem(null); setForm({}); }} onDelete={handleDeleteBill} onSave={handleEditBill} accent={accent}/>}
+      {"category" in (detailItem ?? {}) && detailItem && <BillDetailModal bill={detailItem as Bill} onClose={() => { setDetailItem(null); setForm({}); }} onDelete={handleDeleteBill} onSave={handleEditBill} accent={accent}/>}
     </div>
   );
 }
