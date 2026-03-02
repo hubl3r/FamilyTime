@@ -651,11 +651,15 @@ export default function FinancesPage() {
 
 
   const handleEditBill = async (id: string, data?: Record<string,string>) => {
+    const payload = data ?? form;
+    console.log("[EDIT BILL] id:", id, "payload:", payload);
     const res = await fetch(`/api/finances/bills/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data ?? form),
+      body: JSON.stringify(payload),
     });
+    const json = await res.json();
+    console.log("[EDIT BILL] status:", res.status, "response:", json);
     if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
   };
 
@@ -707,11 +711,14 @@ export default function FinancesPage() {
       promise_to_pay_date_2: form.promise_to_pay_date_2 ?? null,
       promise_notes:    form.promise_notes ?? null,
     };
+    console.log("[LOG PAYMENT] body:", body);
     const res = await fetch("/api/finances/instances", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    const json = await res.json();
+    console.log("[LOG PAYMENT] status:", res.status, "response:", json);
     if (res.ok) {
       setPayModal(null);
       setForm({});
