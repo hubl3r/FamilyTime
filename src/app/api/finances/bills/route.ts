@@ -1,6 +1,6 @@
 // src/app/api/finances/bills/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
+import supabaseServer from "@/lib/supabase";
 import { getSessionMember } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 
@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
     .from("bills")
     .select(`
       *,
-      credentials:encrypted_credentials(website, phone, notes),
       instances:bill_instances(
         id, due_date, status, anticipated_amount, actual_amount,
         remaining_balance, paid_date, paid_full,
