@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       invite_token,
       nickname: nickname?.trim() || null,
       bio: bio?.trim() || null,
-      birthday: date_of_birth || null,
+      birthday: birthday || null,
       phone: phone?.trim() || null,
       blood_type: blood_type || null,
       allergies: allergies?.trim() || null,
