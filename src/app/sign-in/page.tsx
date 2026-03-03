@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export default function SignInPage() {
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ width:56, height:56, borderRadius:18, background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", fontSize:26 }}>🏡</div>
           <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:600, color:"#3D2C2C", marginBottom:4 }}>FamilyTime</h1>
-          <p style={{ fontSize:13, color:"#8B7070" }}>{mode === "signin" ? "Welcome back 🌸" : "Join your family hub 🌿"}</p>
+          <p style={{ fontSize:13, color:"#8B7070" }}>{mode === "signin" ? "Welcome back 🌸" : "Create your account 🌿"}</p>
         </div>
 
         {mode === "signup" && field("Your Name", "text", name, setName, "e.g. Sarah")}
@@ -62,12 +63,36 @@ export default function SignInPage() {
           {loading ? "One moment..." : mode === "signin" ? "Sign In ✨" : "Create Account ✨"}
         </button>
 
-        <div style={{ textAlign:"center", fontSize:13, color:"#8B7070" }}>
+        <div style={{ textAlign:"center", fontSize:13, color:"#8B7070", marginBottom:16 }}>
           {mode === "signin" ? "New here? " : "Already have an account? "}
           <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); }}
             style={{ background:"none", border:"none", color:"#B5A8D4", fontWeight:800, cursor:"pointer", fontSize:13, fontFamily:"'Nunito',sans-serif" }}>
             {mode === "signin" ? "Create account" : "Sign in"}
           </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+          <div style={{ flex:1, height:1, background:"#EDE0D8" }}/>
+          <span style={{ fontSize:12, color:"#B8A8A8", fontWeight:600 }}>or</span>
+          <div style={{ flex:1, height:1, background:"#EDE0D8" }}/>
+        </div>
+
+        {/* Join a family CTA */}
+        <Link href="/join" style={{
+          display:"flex", alignItems:"center", justifyContent:"center", gap:10,
+          width:"100%", padding:"12px 16px",
+          background:"rgba(181,168,212,0.1)",
+          border:"1.5px solid #B5A8D440",
+          borderRadius:12, textDecoration:"none",
+          fontSize:14, fontWeight:800, color:"#8B7BB8",
+          fontFamily:"'Nunito',sans-serif",
+        }}>
+          <span style={{ fontSize:18 }}>🏡</span>
+          Join a family hub
+        </Link>
+        <div style={{ textAlign:"center", fontSize:11, color:"#B8A8A8", marginTop:8 }}>
+          Have an invite code? Enter it to request joining
         </div>
       </div>
     </main>

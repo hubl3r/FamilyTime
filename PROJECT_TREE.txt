@@ -1,5 +1,5 @@
 FamilyTime - Session Transfer Package
-Generated: Sat Feb 28 09:56:54 PM AKST 2026
+Generated: Mon Mar  2 11:46:58 PM AKST 2026
 Live URL:  https://hubler.vercel.app
 Repo:      https://github.com/hubl3r/FamilyTime.git
 Stack:     Next.js 16 + NextAuth + Supabase + Vercel
@@ -38,6 +38,19 @@ FILE TREE:
 ./src/app/api/auth
 ./src/app/api/auth/[...nextauth]
 ./src/app/api/auth/[...nextauth]/route.ts
+./src/app/api/finances
+./src/app/api/finances/bills
+./src/app/api/finances/bills/[id]
+./src/app/api/finances/bills/[id]/route.ts
+./src/app/api/finances/bills/route.ts
+./src/app/api/finances/credit-cards
+./src/app/api/finances/credit-cards/route.ts
+./src/app/api/finances/dashboard
+./src/app/api/finances/dashboard/route.ts
+./src/app/api/finances/instances
+./src/app/api/finances/instances/route.ts
+./src/app/api/finances/upcoming
+./src/app/api/finances/upcoming/route.ts
 ./src/app/dashboard
 ./src/app/dashboard/chores
 ./src/app/dashboard/chores/page.tsx
@@ -66,7 +79,11 @@ FILE TREE:
 ./src/components/BottomNav.tsx
 ./src/components/SignOutButton.tsx
 ./src/components/StylePicker.tsx
+./src/components/StyleSidebar.tsx
+./src/components/ThemeContext.tsx
 ./src/lib
+./src/lib/crypto.ts
+./src/lib/permissions.ts
 ./src/lib/supabase.ts
 ./src/middleware.ts
 ./src/types
