@@ -710,6 +710,7 @@ export default function MembersPage() {
   const accent = theme.accent;
 
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [currentUser, setCurrentUser] = useState<FamilyMember | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -731,13 +732,24 @@ export default function MembersPage() {
 
   const loadMembers = useCallback(async () => {
     try {
-      const [membersRes, familyRes] = await Promise.all([
+      const [membersRes, familyRes, sessionRes] = await Promise.all([
         fetch("/api/members"),
         fetch("/api/family"),
+        fetch("/api/auth/session"),
       ]);
       if (!membersRes.ok) throw new Error("Failed to load members");
-      setMembers(await membersRes.json());
+      const membersData: FamilyMember[] = await membersRes.json();
+      setMembers(membersData);
       if (familyRes.ok) setFamily(await familyRes.json());
+      // Identify the current logged-in user within the members list
+      if (sessionRes.ok) {
+        const session = await sessionRes.json();
+        const email = session?.user?.email?.toLowerCase().trim();
+        if (email) {
+          const me = membersData.find(m => m.email.toLowerCase() === email) ?? null;
+          setCurrentUser(me);
+        }
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -832,10 +844,9 @@ export default function MembersPage() {
   };
 
   // Determine if current user is privileged (owner/admin)
-  // We check the first member that matches our session — approximation since we don't have session here
-  // In practice the API already enforces this; this is just for UI visibility
-  const currentUserRole = members.length > 0 ? (members.find(m => m.role === "owner")?.role ?? "member") : "member";
-  const isPrivileged = currentUserRole === "owner" || currentUserRole === "admin" || joinRequests.length >= 0;
+  // Determine current user's role from the matched session member
+  const currentUserRole: MemberRole = currentUser?.role ?? "member";
+  const isPrivileged = currentUserRole === "owner" || currentUserRole === "admin";
 
   const activeCount = members.filter(m => m.is_active).length;
   const pendingCount = members.filter(m => m.invite_status === "pending").length;
@@ -1046,7 +1057,8 @@ export default function MembersPage() {
       </div>)} {/* end Members tab */}
 
       {/* Modals */}
-      {selectedMember && !editingMember && editingMember !== null && (
+      {/* Detail drawer: show when a member is selected AND we're not in edit mode */}
+      {selectedMember && editingMember === undefined && (
         <MemberDetailDrawer
           member={selectedMember}
           onClose={() => setSelectedMember(null)}
@@ -1056,6 +1068,7 @@ export default function MembersPage() {
           accent={accent}
         />
       )}
+      {/* Form modal: show when editing (null = new member, FamilyMember = editing existing) */}
       {editingMember !== undefined && (
         <MemberFormModal
           member={editingMember}
