@@ -733,11 +733,11 @@ function BillDetailModal({ bill, onClose, onDelete, onSave, accent, familyId }: 
 export default function FinancesPage() {
   const { theme } = useTheme();
   const accent = theme.accent;
-  const { currentContext, isPersonal } = useUser();
+  const { currentContext, isPersonal, loading: userLoading } = useUser();
 
   // Helper to append family_id to any URL
   const fp = useCallback((url: string) => {
-    if (isPersonal || !currentContext) return url;
+    if (isPersonal || !currentContext || currentContext === "personal") return url;
     const sep = url.includes("?") ? "&" : "?";
     return `${url}${sep}family_id=${currentContext}`;
   }, [currentContext, isPersonal]);
@@ -786,10 +786,11 @@ export default function FinancesPage() {
   }, [fp]);
 
   useEffect(() => {
+    if (userLoading) return; // wait for context to resolve before fetching
     setLoading(true);
     Promise.all([loadDashboard(), loadBills(), loadCards(), loadUpcoming()])
       .finally(() => setLoading(false));
-  }, [loadDashboard, loadBills, loadCards, loadUpcoming, currentContext]);
+  }, [loadDashboard, loadBills, loadCards, loadUpcoming, currentContext, userLoading]);
 
   useEffect(() => {
     if (view === "accounts") loadBills(activeCategory ?? undefined);

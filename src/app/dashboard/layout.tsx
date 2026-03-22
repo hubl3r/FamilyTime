@@ -1,6 +1,7 @@
 // src/app/dashboard/layout.tsx
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import SignOutButton from "@/components/SignOutButton";
 import { ThemeProvider } from "@/components/ThemeContext";
@@ -29,12 +30,28 @@ export default async function DashboardLayout({ children }: { children: React.Re
             display:"flex", alignItems:"center", justifyContent:"space-between",
             gap: 12,
           }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:32, height:32, borderRadius:10, background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>🏡</div>
-              <span style={{ fontFamily:"'Fraunces',serif", fontSize:17, fontWeight:600, color:"var(--ink)", marginRight:4 }}>FamilyTime</span>
+            {/* Left: logo (clickable) + context switcher */}
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <Link href="/dashboard" style={{
+                display:"flex", alignItems:"center", gap:8,
+                textDecoration:"none", flexShrink:0,
+              }}>
+                <div style={{ width:32, height:32, borderRadius:10, background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>🏡</div>
+                <span style={{ fontFamily:"'Fraunces',serif", fontSize:17, fontWeight:600, color:"var(--ink)" }}>FamilyTime</span>
+              </Link>
               <ContextSwitcher />
             </div>
+
+            {/* Right: logged-in user + sign out */}
             <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"var(--ink)", lineHeight:1.3 }}>
+                  {session.user?.name}
+                </div>
+                <div style={{ fontSize:10, color:"var(--ink-subtle)", lineHeight:1.3 }}>
+                  {session.user?.email}
+                </div>
+              </div>
               <SignOutButton />
             </div>
           </header>
