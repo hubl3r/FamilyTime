@@ -7,7 +7,7 @@ import { encryptCredentials, decryptCredentials } from "@/lib/crypto";
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/finances/bills/[id] — get single bill with credentials
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 // DELETE /api/finances/bills/[id] — soft delete (set is_active = false)
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

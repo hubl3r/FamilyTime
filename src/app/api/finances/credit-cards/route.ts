@@ -4,7 +4,7 @@ import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
 import { getSessionMemberForFamily } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
