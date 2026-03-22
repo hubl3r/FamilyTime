@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     last_name:   member.last_name,
     email:       member.email,
     role:        member.role,
-    family_name: (member.families as { name: string } | null)?.name ?? "Your Family",
+    family_name: ((member.families as unknown as { name: string }[])?.[0]?.name) ?? "Your Family",
   });
 }
 
