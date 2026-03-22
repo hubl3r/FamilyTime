@@ -61,6 +61,18 @@ export const authOptions: NextAuthOptions = {
           const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) throw new Error("Incorrect password");
 
+          // Link this user to their family_members row if not already linked,
+          // and mark invite as accepted
+          await supabaseAdmin
+            .from("family_members")
+            .update({
+              nextauth_user_id: user.id,
+              invite_status: "accepted",
+              joined_at: new Date().toISOString(),
+            })
+            .eq("email", email)
+            .is("nextauth_user_id", null); // only update if not already linked
+
           return { id: user.id, email: user.email, name: user.name };
         }
       },

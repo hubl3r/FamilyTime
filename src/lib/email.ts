@@ -161,7 +161,7 @@ export async function sendVerificationEmail({
   name: string;
   verifyToken: string;
 }) {
-  const verifyUrl = `${APP_URL}/verify-email?token=${verifyToken}`;
+  const verifyUrl = `${APP_URL}/api/verify-email?token=${verifyToken}`;
   const html = emailShell(`
     <p>Hi ${name},</p>
     <p>Thanks for creating your ${APP_NAME} account. Just one more step — please verify your email address:</p>
