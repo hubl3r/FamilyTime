@@ -2,17 +2,22 @@
 "use client";
 import React, { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justVerified = searchParams.get("verified") === "1";
+  const tokenError   = searchParams.get("error") === "invalid-token";
+
   const [mode, setMode]         = useState<"signin"|"signup">("signin");
   const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
 
   const submit = async () => {
     setError(""); setLoading(true);
@@ -22,6 +27,10 @@ export default function SignInPage() {
     });
     setLoading(false);
     if (res?.error) { setError(res.error); return; }
+    if (mode === "signup") {
+      setJustRegistered(true);
+      return;
+    }
     router.push("/dashboard");
   };
 
@@ -41,6 +50,25 @@ export default function SignInPage() {
       <div style={{ position:"fixed", bottom:-80, left:-80, width:300, height:300, borderRadius:"50%", background:"rgba(232,165,165,0.2)", pointerEvents:"none" }}/>
 
       <div style={{ background:"rgba(255,252,250,0.92)", backdropFilter:"blur(20px)", border:"1.5px solid #EDE0D8", borderRadius:24, padding:"40px 36px", width:"100%", maxWidth:420, boxShadow:"0 20px 60px rgba(100,60,60,0.12)", position:"relative" }}>
+        {/* Status banners */}
+        {justVerified && (
+          <div style={{ background:"#E3EFE1", border:"1px solid #A8C5A060", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#3D6B3A", fontWeight:600 }}>
+            ✅ Email verified! You can now sign in.
+          </div>
+        )}
+        {tokenError && (
+          <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#DC2626", fontWeight:600 }}>
+            ⚠️ That verification link is invalid or expired.
+          </div>
+        )}
+        {justRegistered && (
+          <div style={{ background:"#EDE9F7", border:"1px solid #B5A8D460", borderRadius:10, padding:"16px", marginBottom:20, textAlign:"center" }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>📬</div>
+            <div style={{ fontSize:14, fontWeight:800, color:"#3D2C2C", marginBottom:4 }}>Check your email</div>
+            <div style={{ fontSize:13, color:"#8B7070" }}>We sent a verification link to <strong>{email}</strong>. Click it to activate your account, then sign in.</div>
+          </div>
+        )}
+
         {/* Logo */}
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ width:56, height:56, borderRadius:18, background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", fontSize:26 }}>🏡</div>

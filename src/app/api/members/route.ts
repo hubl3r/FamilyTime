@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionMember } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase";
 import crypto from "crypto";
+import { sendInviteEmail } from "@/lib/email";
 
 const MEMBER_SELECT = `
   id, family_id, nextauth_user_id, email, first_name, last_name, initials, color, role,
@@ -111,26 +112,24 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // ── Send invite email via Supabase Auth invite or your email provider ──
-  // If you have Supabase Auth enabled with email:
+  // ── Send invite email ─────────────────────────────────────────
   try {
-    const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${invite_token}`;
+    const { data: family } = await supabaseAdmin
+      .from("families")
+      .select("name")
+      .eq("id", sessionMember.family_id)
+      .single();
 
-    // Option A: Use Supabase's built-in invite (requires Auth enabled)
-    // await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    //   data: { invite_token, family_id: sessionMember.family_id },
-    //   redirectTo: inviteUrl,
-    // });
-
-    // Option B: Send via your email provider (Resend, SendGrid, etc.)
-    // For now we log the invite URL — wire up your email provider here
-    console.log(`[INVITE] ${first_name} ${last_name} <${normalizedEmail}> — ${inviteUrl}`);
-
-    // TODO: Replace with actual email send, e.g.:
-    // await sendInviteEmail({ to: normalizedEmail, name: first_name, inviteUrl, familyName: "The Family" });
+    await sendInviteEmail({
+      to: normalizedEmail,
+      firstName: first_name.trim(),
+      inviteToken: invite_token,
+      familyName: family?.name ?? "Your Family",
+      invitedByName: sessionMember.first_name ?? "A family member",
+    });
   } catch (emailErr) {
     console.error("[INVITE] Email failed:", emailErr);
-    // Don't fail the request if email fails — member record is created
+    // Don't fail the request if email fails — member record is already created
   }
 
   return NextResponse.json(newMember, { status: 201 });

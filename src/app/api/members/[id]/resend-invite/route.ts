@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionMember } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase";
 import crypto from "crypto";
+import { sendResendInviteEmail } from "@/lib/email";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -35,9 +36,17 @@ export async function POST(_req: NextRequest, { params }: Params) {
     .update({ invite_token: new_token, invite_status: "pending", updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${new_token}`;
-  console.log(`[RESEND INVITE] ${target.first_name} <${target.email}> — ${inviteUrl}`);
-  // TODO: send actual email here
+  try {
+    const { data: family } = await supabaseAdmin.from("families").select("name").eq("id", sessionMember.family_id).single();
+    await sendResendInviteEmail({
+      to: target.email,
+      firstName: target.first_name,
+      inviteToken: new_token,
+      familyName: family?.name ?? "the family",
+    });
+  } catch (emailErr) {
+    console.error("[RESEND INVITE] Email failed:", emailErr);
+  }
 
   return NextResponse.json({ success: true });
 }

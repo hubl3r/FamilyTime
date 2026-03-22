@@ -31,7 +31,7 @@ export default function JoinFamilyPage() {
   const [email, setEmail] = useState("");
 
   const handleCodeLookup = async () => {
-    if (code.trim().length < 4) {
+    if (code.trim().length < 3) {
       setCodeError("Please enter a valid invite code");
       return;
     }
@@ -185,10 +185,10 @@ export default function JoinFamilyPage() {
               <label style={labelStyle}>Family Invite Code</label>
               <input
                 value={code}
-                onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setCodeError(""); }}
+                onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "")); setCodeError(""); }}
                 onKeyDown={e => e.key === "Enter" && handleCodeLookup()}
-                maxLength={8}
-                placeholder="e.g. SMITH-42"
+                maxLength={12}
+                placeholder="e.g. HUBLER-4F"
                 style={{ ...inputStyle, textAlign: "center", fontSize: 22, fontWeight: 800, letterSpacing: 4 }}
               />
               {codeError && (
@@ -197,12 +197,12 @@ export default function JoinFamilyPage() {
             </div>
             <button
               onClick={handleCodeLookup}
-              disabled={submitting || code.trim().length < 4}
+              disabled={submitting || code.trim().length < 3}
               style={{
                 width: "100%", padding: 13,
-                background: submitting || code.trim().length < 4 ? "#EDE0D8" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
+                background: submitting || code.trim().length < 3 ? "#EDE0D8" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
                 color: "#fff", border: "none", borderRadius: 12,
-                fontSize: 15, fontWeight: 800, cursor: submitting || code.trim().length < 4 ? "not-allowed" : "pointer",
+                fontSize: 15, fontWeight: 800, cursor: submitting || code.trim().length < 3 ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
               }}
             >

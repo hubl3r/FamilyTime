@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionMember } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase";
 import crypto from "crypto";
+import { sendJoinApprovedEmail, sendJoinDeniedEmail } from "@/lib/email";
 
 const AVATAR_COLORS = [
   "#E8A5A5", "#B5A8D4", "#A8C8E8", "#A8C5A0", "#F0C4A0",
@@ -69,6 +70,12 @@ export async function PATCH(req: NextRequest) {
 
     // TODO: notify applicant via email
     console.log(`[JOIN REQUEST] Denied: ${joinReq.first_name} ${joinReq.last_name} <${joinReq.email}>`);
+
+    try {
+      const { data: family } = await supabaseAdmin.from("families").select("name").eq("id", sessionMember.family_id).single();
+      await sendJoinDeniedEmail({ to: joinReq.email, firstName: joinReq.first_name, familyName: family?.name ?? "the family" });
+    } catch (e) { console.error("[JOIN DENY] Email failed:", e); }
+
     return NextResponse.json({ success: true, action: "denied" });
   }
 
@@ -125,9 +132,13 @@ export async function PATCH(req: NextRequest) {
 
   // Notify applicant
   try {
-    const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${invite_token}`;
-    // TODO: send email to joinReq.email
-    console.log(`[JOIN REQUEST] Approved: ${joinReq.first_name} ${joinReq.last_name} — invite: ${inviteUrl}`);
+    const { data: family } = await supabaseAdmin.from("families").select("name").eq("id", sessionMember.family_id).single();
+    await sendJoinApprovedEmail({
+      to: joinReq.email,
+      firstName: joinReq.first_name,
+      inviteToken: invite_token,
+      familyName: family?.name ?? "the family",
+    });
   } catch (emailErr) {
     console.error("[JOIN REQUEST] Approval email failed:", emailErr);
   }

@@ -2,7 +2,9 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendVerificationEmail } from "@/lib/email";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -30,12 +32,20 @@ export const authOptions: NextAuthOptions = {
           // Hash and store
           const hashed = await bcrypt.hash(credentials.password, 10);
           const name = credentials.name || email.split("@")[0];
+          const verify_token = crypto.randomBytes(32).toString("hex");
           const { data: user, error } = await supabaseAdmin
             .from("users")
-            .insert({ email, password: hashed, name })
+            .insert({ email, password: hashed, name, verify_token, email_verified: false })
             .select()
             .single();
           if (error || !user) throw new Error("Failed to create account");
+
+          // Send verification email (non-blocking)
+          try {
+            await sendVerificationEmail({ to: email, name, verifyToken: verify_token });
+          } catch (emailErr) {
+            console.error("[VERIFY] Email failed:", emailErr);
+          }
 
           return { id: user.id, email: user.email, name: user.name };
 
