@@ -35,10 +35,19 @@ export async function getSessionMember(): Promise<SessionMember | null> {
     .select("id, family_id, role, email, first_name")
     .eq("email", session.user.email.toLowerCase().trim())
     .eq("is_active", true)
-    .single();
+    .maybeSingle(); // Use maybeSingle so no-row returns null instead of error
 
   if (error || !data) return null;
   return data as SessionMember;
+}
+
+/**
+ * Get the raw authenticated user email from the NextAuth session.
+ * Useful for onboarding flows before a family_members row exists.
+ */
+export async function getSessionEmail(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  return session?.user?.email?.toLowerCase().trim() ?? null;
 }
 
 /**
