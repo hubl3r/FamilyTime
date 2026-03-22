@@ -10,6 +10,7 @@ function SignInForm() {
   const searchParams = useSearchParams();
   const justVerified = searchParams.get("verified") === "1";
   const tokenError   = searchParams.get("error") === "invalid-token";
+  const justInvited  = searchParams.get("invited") === "1";
 
   const [mode, setMode]         = useState<"signin"|"signup">("signin");
   const [name, setName]         = useState("");
@@ -51,6 +52,11 @@ function SignInForm() {
 
       <div style={{ background:"rgba(255,252,250,0.92)", backdropFilter:"blur(20px)", border:"1.5px solid #EDE0D8", borderRadius:24, padding:"40px 36px", width:"100%", maxWidth:420, boxShadow:"0 20px 60px rgba(100,60,60,0.12)", position:"relative" }}>
         {/* Status banners */}
+        {justInvited && (
+          <div style={{ background:"#EDE9F7", border:"1px solid #B5A8D460", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#6B4FA8", fontWeight:600 }}>
+            🏡 Account created! Sign in to access your family hub.
+          </div>
+        )}
         {justVerified && (
           <div style={{ background:"#E3EFE1", border:"1px solid #A8C5A060", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#3D6B3A", fontWeight:600 }}>
             ✅ Email verified! You can now sign in.
