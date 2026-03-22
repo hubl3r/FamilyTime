@@ -1,82 +1,43 @@
-// src/app/api/members/[id]/route.ts
+// src/app/api/members/[id]/resend-invite/route.ts
+// POST — resend the invite email to a pending member
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionMember } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase";
-
-const MEMBER_SELECT = `
-  id, family_id, nextauth_user_id, email, first_name, last_name, initials, color, role,
-  is_active, invite_status, invite_token,
-  birthday, phone, blood_type, allergies, medications, medical_notes,
-  emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
-  bio, nickname, created_at, joined_at
-`;
+import crypto from "crypto";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function POST(_req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   const sessionMember = await getSessionMember();
   if (!sessionMember) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const isSelf = sessionMember.id === id;
-  const isPrivileged = sessionMember.role === "owner" || sessionMember.role === "admin";
-
-  if (!isSelf && !isPrivileged) {
+  if (sessionMember.role !== "owner" && sessionMember.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data: target, error: fetchErr } = await supabaseAdmin
     .from("family_members")
-    .select("id, family_id, role, first_name, last_name")
+    .select("id, family_id, email, first_name, invite_status, is_active")
     .eq("id", id)
     .eq("family_id", sessionMember.family_id)
     .single();
 
   if (fetchErr || !target) return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  if (!target.is_active) return NextResponse.json({ error: "Member is inactive" }, { status: 400 });
+  if (target.invite_status === "accepted") return NextResponse.json({ error: "Member already accepted invite" }, { status: 400 });
 
-  const body = await req.json();
-
-  if (body.role === "owner" && sessionMember.role !== "owner") {
-    return NextResponse.json({ error: "Only owners can assign the owner role" }, { status: 403 });
-  }
-
-  const allowedFields: Record<string, unknown> = {};
-
-  const profileFields = [
-    "first_name", "last_name", "nickname", "bio",
-    "birthday", "phone", "color",
-    "blood_type", "allergies", "medications", "medical_notes",
-    "emergency_contact_name", "emergency_contact_phone", "emergency_contact_relation",
-  ];
-
-  for (const field of profileFields) {
-    if (field in body) {
-      allowedFields[field] = body[field] === "" ? null : body[field];
-    }
-  }
-
-  if (isPrivileged) {
-    if ("role" in body) allowedFields.role = body.role;
-    if ("is_active" in body) allowedFields.is_active = body.is_active;
-  }
-
-  if (allowedFields.first_name || allowedFields.last_name) {
-    const fn = (allowedFields.first_name as string) ?? target.first_name;
-    const ln = (allowedFields.last_name as string) ?? target.last_name;
-    allowedFields.initials = `${(fn[0] ?? "").toUpperCase()}${(ln[0] ?? "").toUpperCase()}`;
-  }
-
-  allowedFields.updated_at = new Date().toISOString();
-
-  const { data: updated, error } = await supabaseAdmin
+  // Rotate token so stale links cannot be reused
+  const new_token = crypto.randomBytes(32).toString("hex");
+  await supabaseAdmin
     .from("family_members")
-    .update(allowedFields)
-    .eq("id", id)
-    .select(MEMBER_SELECT)
-    .single();
+    .update({ invite_token: new_token, invite_status: "pending", updated_at: new Date().toISOString() })
+    .eq("id", id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const inviteUrl = `${process.env.NEXTAUTH_URL}/accept-invite?token=${new_token}`;
+  console.log(`[RESEND INVITE] ${target.first_name} <${target.email}> — ${inviteUrl}`);
+  // TODO: send actual email here
 
-  return NextResponse.json(updated);
+  return NextResponse.json({ success: true });
 }
