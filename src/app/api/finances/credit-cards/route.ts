@@ -1,11 +1,11 @@
 // src/app/api/finances/credit-cards/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember } from "@/lib/permissions";
+import { getSessionMemberForFamily } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 
 export async function GET(_req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data, error } = await supabaseServer
@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();

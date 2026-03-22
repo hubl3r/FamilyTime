@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember } from "@/lib/permissions";
+import { getSessionMemberForFamily } from "@/lib/permissions";
 
 type BillFrequency =
   | "one_time" | "daily" | "weekly" | "biweekly"
@@ -62,7 +62,7 @@ function getProjectedDates(
 
 // GET /api/finances/upcoming?days=30&count=10
 export async function GET(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

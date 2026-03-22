@@ -1,7 +1,7 @@
 // src/app/api/finances/bills/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember, checkPermission } from "@/lib/permissions";
+import { getSessionMemberForFamily, checkPermission } from "@/lib/permissions";
 import { encryptCredentials, decryptCredentials } from "@/lib/crypto";
 
 type Params = { params: Promise<{ id: string }> };
@@ -9,7 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 // GET /api/finances/bills/[id] — get single bill with credentials
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const canView = await checkPermission(member, "bill", id, "can_view");
@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // PATCH /api/finances/bills/[id] — update a bill
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const canEdit = await checkPermission(member, "bill", id, "can_edit");
@@ -98,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 // DELETE /api/finances/bills/[id] — soft delete (set is_active = false)
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const { id } = await params;
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const canDelete = await checkPermission(member, "bill", id, "can_delete");

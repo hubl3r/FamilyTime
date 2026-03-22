@@ -2,6 +2,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import { useTheme } from "@/components/ThemeContext";
+import { useUser } from "@/components/UserContext";
 
 // ── Types ─────────────────────────────────────────────────────
 type Bill = {
@@ -383,8 +384,8 @@ function DetailRow({ label, value, href }: { label: string; value: string; href?
 }
 
 // ── Transaction card: view/edit/delete a single instance ──────
-function TransactionCard({ inst, billId, accent, onChanged }: {
-  inst: BillInstance; billId: string; accent: string; onChanged: () => void;
+function TransactionCard({ inst, billId, accent, onChanged, familyId }: {
+  inst: BillInstance; billId: string; accent: string; onChanged: () => void; familyId: string;
 }) {
   const [mode, setMode] = React.useState<"view"|"edit">("view");
   const [confirmDel, setConfirmDel] = React.useState(false);
@@ -400,7 +401,7 @@ function TransactionCard({ inst, billId, accent, onChanged }: {
 
   const handleSave = async () => {
     setBusy(true);
-    await fetch("/api/finances/instances", {
+    await fetch(`/api/finances/instances?family_id=${familyId}`, {
       method: "PATCH",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
@@ -421,7 +422,7 @@ function TransactionCard({ inst, billId, accent, onChanged }: {
 
   const handleDelete = async () => {
     setBusy(true);
-    await fetch(`/api/finances/instances?id=${inst.id}`, { method: "DELETE" });
+    await fetch(`/api/finances/instances?id=${inst.id}&family_id=${familyId}`, { method: "DELETE" });
     setBusy(false);
     onChanged();
   };
@@ -482,13 +483,13 @@ function TransactionCard({ inst, billId, accent, onChanged }: {
 }
 
 // ── Add Transaction modal (inline in detail) ──────────────────
-function AddTransactionInline({ bill, accent, onDone }: { bill: Bill; accent: string; onDone: () => void }) {
+function AddTransactionInline({ bill, accent, onDone, familyId }: { bill: Bill; accent: string; onDone: () => void; familyId: string }) {
   const [form, setForm] = React.useState({ actual_amount: "", paid_date: new Date().toISOString().split("T")[0], status: "paid_full", due_date: "", notes: "" });
   const [busy, setBusy] = React.useState(false);
   const handleSave = async () => {
     if (!form.due_date) return;
     setBusy(true);
-    await fetch("/api/finances/instances", {
+    await fetch(`/api/finances/instances?family_id=${familyId}`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
@@ -529,12 +530,13 @@ function AddTransactionInline({ bill, accent, onDone }: { bill: Bill; accent: st
 }
 
 // ── Modal: Bill Detail / Edit / Delete ────────────────────────
-function BillDetailModal({ bill, onClose, onDelete, onSave, accent }: {
+function BillDetailModal({ bill, onClose, onDelete, onSave, accent, familyId }: {
   bill: Bill;
   saving?: boolean; onClose: () => void;
   onDelete: (id: string) => void;
   onSave: (id: string, data: Record<string,string>) => void;
   accent: string;
+  familyId: string;
 }) {
   const [tab, setTab] = React.useState<"details"|"credentials"|"edit">("details");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
@@ -624,12 +626,12 @@ function BillDetailModal({ bill, onClose, onDelete, onSave, accent }: {
                     {showAddTx ? "Cancel" : "+ Add"}
                   </button>
                 </div>
-                {showAddTx && <AddTransactionInline bill={bill} accent={accent} onDone={() => { setShowAddTx(false); setTxRefresh(n => n+1); }}/>}
+                {showAddTx && <AddTransactionInline bill={bill} accent={accent} familyId={familyId} onDone={() => { setShowAddTx(false); setTxRefresh(n => n+1); }}/>}
                 {(bill.instances ?? []).length === 0 && !showAddTx ? (
                   <div style={{ textAlign: "center", padding: "20px 0", color: "#B8A8A8", fontSize: 12 }}>No transactions yet — tap + Add to log one</div>
                 ) : (
                   [...(bill.instances ?? [])].sort((a,b) => b.due_date?.localeCompare(a.due_date) ?? 0).slice(0, 12).map((inst, i) => (
-                    <TransactionCard key={inst.id ?? i} inst={inst} billId={bill.id} accent={accent} onChanged={() => setTxRefresh(n => n+1)}/>
+                    <TransactionCard key={inst.id ?? i} inst={inst} billId={bill.id} accent={accent} familyId={familyId} onChanged={() => setTxRefresh(n => n+1)}/>
                   ))
                 )}
               </div>
@@ -731,6 +733,14 @@ function BillDetailModal({ bill, onClose, onDelete, onSave, accent }: {
 export default function FinancesPage() {
   const { theme } = useTheme();
   const accent = theme.accent;
+  const { currentContext, isPersonal } = useUser();
+
+  // Helper to append family_id to any URL
+  const fp = useCallback((url: string) => {
+    if (isPersonal || !currentContext) return url;
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}family_id=${currentContext}`;
+  }, [currentContext, isPersonal]);
 
   // Navigation state
   const [view,        setView]        = useState<"dashboard"|"accounts"|"upcoming"|"past_due"|"history"|"search">("dashboard");
@@ -755,31 +765,31 @@ export default function FinancesPage() {
   const [saving, setSaving] = useState(false);
 
   const loadDashboard = useCallback(async () => {
-    const res = await fetch("/api/finances/dashboard");
+    const res = await fetch(fp("/api/finances/dashboard"));
     if (res.ok) setDashboard(await res.json());
-  }, []);
+  }, [fp]);
 
   const loadBills = useCallback(async (category?: string) => {
     const url = category ? `/api/finances/bills?category=${category}` : "/api/finances/bills";
-    const res = await fetch(url);
+    const res = await fetch(fp(url));
     if (res.ok) setBills(await res.json());
-  }, []);
+  }, [fp]);
 
   const loadCards = useCallback(async () => {
-    const res = await fetch("/api/finances/credit-cards");
+    const res = await fetch(fp("/api/finances/credit-cards"));
     if (res.ok) setCards(await res.json());
-  }, []);
+  }, [fp]);
 
   const loadUpcoming = useCallback(async () => {
-    const res = await fetch("/api/finances/upcoming?days=30&count=10");
+    const res = await fetch(fp("/api/finances/upcoming?days=30&count=10"));
     if (res.ok) setUpcoming(await res.json());
-  }, []);
+  }, [fp]);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([loadDashboard(), loadBills(), loadCards(), loadUpcoming()])
       .finally(() => setLoading(false));
-  }, [loadDashboard, loadBills, loadCards, loadUpcoming]);
+  }, [loadDashboard, loadBills, loadCards, loadUpcoming, currentContext]);
 
   useEffect(() => {
     if (view === "accounts") loadBills(activeCategory ?? undefined);
@@ -787,7 +797,7 @@ export default function FinancesPage() {
 
   const handleSaveBill = async () => {
     setSaving(true);
-    const res = await fetch("/api/finances/bills", {
+    const res = await fetch(fp("/api/finances/bills"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -802,7 +812,7 @@ export default function FinancesPage() {
 
   const handleSaveCard = async () => {
     setSaving(true);
-    const res = await fetch("/api/finances/credit-cards", {
+    const res = await fetch(fp("/api/finances/credit-cards"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -819,20 +829,17 @@ export default function FinancesPage() {
 
   const handleEditBill = async (id: string, data?: Record<string,string>) => {
     const payload = data ?? form;
-    console.log("[EDIT BILL] id:", id, "payload:", payload);
-    const res = await fetch(`/api/finances/bills/${id}`, {
+    const res = await fetch(fp(`/api/finances/bills/${id}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const json = await res.json();
-    console.log("[EDIT BILL] status:", res.status, "response:", json);
     if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
   };
 
   const handleDeleteBill = async (id: string) => {
     setSaving(true);
-    const res = await fetch(`/api/finances/bills/${id}`, { method: 'DELETE' });
+    const res = await fetch(fp(`/api/finances/bills/${id}`), { method: 'DELETE' });
     if (res.ok) { setDetailItem(null); setForm({}); await Promise.all([loadBills(), loadDashboard()]); }
     setSaving(false);
   };
@@ -841,7 +848,7 @@ export default function FinancesPage() {
     if (!payModal) return;
     setSaving(true);
     if (payModal.id) {
-      await fetch("/api/finances/instances", {
+      await fetch(fp("/api/finances/instances"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -878,14 +885,11 @@ export default function FinancesPage() {
       promise_to_pay_date_2: form.promise_to_pay_date_2 ?? null,
       promise_notes:    form.promise_notes ?? null,
     };
-    console.log("[LOG PAYMENT] body:", body);
-    const res = await fetch("/api/finances/instances", {
+    const res = await fetch(fp("/api/finances/instances"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const json = await res.json();
-    console.log("[LOG PAYMENT] status:", res.status, "response:", json);
     if (res.ok) {
       setPayModal(null);
       setForm({});
@@ -1267,7 +1271,7 @@ export default function FinancesPage() {
       {addModal === "bill" && <AddBillModal form={form} setForm={setForm} saving={saving} onSave={handleSaveBill} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {addModal === "card" && <AddCardModal form={form} setForm={setForm} saving={saving} onSave={handleSaveCard} onClose={() => { setAddModal(null); setForm({}); }} accent={accent}/>}
       {payModal && <PayModal item={payModal} form={form} setForm={setForm} saving={saving} onPay={handleLogPayment} onPTP={handlePTP} onClose={() => { setPayModal(null); setForm({}); }} accent={accent}/>}
-      {"category" in (detailItem ?? {}) && detailItem && <BillDetailModal bill={detailItem as Bill} onClose={() => { setDetailItem(null); setForm({}); }} onDelete={handleDeleteBill} onSave={handleEditBill} accent={accent}/>}
+      {"category" in (detailItem ?? {}) && detailItem && <BillDetailModal bill={detailItem as Bill} onClose={() => { setDetailItem(null); setForm({}); }} onDelete={handleDeleteBill} onSave={handleEditBill} accent={accent} familyId={currentContext}/>}
     </div>
   );
 }

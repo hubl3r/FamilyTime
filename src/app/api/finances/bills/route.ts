@@ -1,12 +1,12 @@
 // src/app/api/finances/bills/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember } from "@/lib/permissions";
+import { getSessionMemberForFamily } from "@/lib/permissions";
 import { encryptCredentials } from "@/lib/crypto";
 
 // GET /api/finances/bills — list all bills for the family
 export async function GET(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/finances/bills — create a new bill
 export async function POST(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();

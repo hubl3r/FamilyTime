@@ -35,8 +35,45 @@ export async function getSessionMember(): Promise<SessionMember | null> {
     .select("id, family_id, role, email, first_name")
     .eq("email", session.user.email.toLowerCase().trim())
     .eq("is_active", true)
-    .maybeSingle(); // Use maybeSingle so no-row returns null instead of error
+    .maybeSingle();
 
+  if (error || !data) return null;
+  return data as SessionMember;
+}
+
+/**
+ * Like getSessionMember(), but respects an optional ?family_id= query param.
+ * If family_id is provided, validates the user belongs to that family and returns
+ * their membership record for it. Falls back to primary family if not provided.
+ * Use this in all family-scoped API routes to support multi-family context switching.
+ */
+export async function getSessionMemberForFamily(req: { url?: string; nextUrl?: { searchParams: URLSearchParams } }): Promise<SessionMember | null> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return null;
+
+  const email = session.user.email.toLowerCase().trim();
+
+  // Extract requested family_id from query params
+  let requestedFamilyId: string | null = null;
+  try {
+    if (req.nextUrl?.searchParams) {
+      requestedFamilyId = req.nextUrl.searchParams.get("family_id");
+    } else if (req.url) {
+      requestedFamilyId = new URL(req.url).searchParams.get("family_id");
+    }
+  } catch { /* ignore */ }
+
+  let query = supabaseServer
+    .from("family_members")
+    .select("id, family_id, role, email, first_name")
+    .eq("email", email)
+    .eq("is_active", true);
+
+  if (requestedFamilyId) {
+    query = query.eq("family_id", requestedFamilyId);
+  }
+
+  const { data, error } = await query.maybeSingle();
   if (error || !data) return null;
   return data as SessionMember;
 }

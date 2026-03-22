@@ -3,11 +3,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember, checkPermission } from "@/lib/permissions";
+import { getSessionMemberForFamily, checkPermission } from "@/lib/permissions";
 
 // POST /api/finances/instances — create or update a payment instance
 export async function POST(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/finances/instances — update promise to pay or mark paid
 export async function PATCH(req: NextRequest) {
-  const member = await getSessionMember();
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();

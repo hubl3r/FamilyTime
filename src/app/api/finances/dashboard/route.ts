@@ -1,12 +1,12 @@
 // src/app/api/finances/dashboard/route.ts
 // Financial dashboard summary — budget vs actual, totals, alerts
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin as supabaseServer } from "@/lib/supabase";
-import { getSessionMember } from "@/lib/permissions";
+import { getSessionMemberForFamily } from "@/lib/permissions";
 
-export async function GET() {
-  const member = await getSessionMember();
+export async function GET(req: NextRequest) {
+  const member = await getSessionMemberForFamily(req);
   if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const today = new Date();
