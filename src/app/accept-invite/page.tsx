@@ -25,6 +25,7 @@ function AcceptInviteForm() {
   const token = searchParams.get("token") ?? "";
   const { data: session, status } = useSession();
   const isSignedIn = status === "authenticated";
+  const sessionLoading = status === "loading";
 
   const [info, setInfo]         = useState<InviteInfo | null>(null);
   const [loadErr, setLoadErr]   = useState("");
@@ -180,8 +181,8 @@ function AcceptInviteForm() {
           <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:600, color:"#3D2C2C", margin:0 }}>FamilyTime</h1>
         </div>
 
-        {/* Loading */}
-        {loading && (
+        {/* Loading — wait for both invite info and session to resolve */}
+        {(loading || sessionLoading) && (
           <div style={{ textAlign:"center", padding:"24px 0", color:"#B8A8A8" }}>
             <div style={{ fontSize:32, marginBottom:8 }}>⏳</div>
             <div style={{ fontSize:14 }}>Loading your invite...</div>
@@ -189,7 +190,7 @@ function AcceptInviteForm() {
         )}
 
         {/* Error loading */}
-        {!loading && loadErr && (
+        {!loading && !sessionLoading && loadErr && (
           <div style={{ textAlign:"center", padding:"16px 0" }}>
             <div style={{ fontSize:40, marginBottom:12 }}>😕</div>
             <div style={{ fontSize:15, fontWeight:800, color:"#3D2C2C", marginBottom:8 }}>Invite not found</div>
@@ -198,7 +199,7 @@ function AcceptInviteForm() {
           </div>
         )}
 
-        {!loading && info && (
+        {!loading && !sessionLoading && info && (
           <>
             {/* Family banner */}
             <div style={{
