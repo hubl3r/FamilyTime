@@ -38,7 +38,7 @@ export async function GET() {
       emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
       created_at, joined_at,
       families:family_id (
-        id, name, invite_code, is_searchable, is_personal, created_at
+        id, name, invite_code, is_searchable, is_personal, owner_email, created_at
       )
     `)
     .eq("nextauth_user_id", resolvedUserId)

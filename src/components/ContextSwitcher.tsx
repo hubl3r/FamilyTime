@@ -18,15 +18,19 @@ export default function ContextSwitcher() {
 
   if (!me) return null;
 
-  // Current family display
-  const isPersonalFamily = !!(currentFamily?.family as unknown as { is_personal?: boolean })?.is_personal;
-  const currentLabel = isPersonalFamily ? "My Space" : (currentFamily?.family?.name ?? "Family");
-  const currentAvatarBg = isPersonalFamily ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
-  const currentInitials = isPersonalFamily ? (me.initials || "?") : currentLabel.slice(0, 2).toUpperCase();
+  // A family is "My Space" only if it's personal AND owned by the current user
+  function isMySpace(family: typeof currentFamily | typeof me.families[0]) {
+    const f = family as unknown as { family?: { is_personal?: boolean; owner_email?: string } };
+    return !!(f?.family?.is_personal && f?.family?.owner_email === me!.email);
+  }
+
+  const mySpace = isMySpace(currentFamily);
+  const currentLabel = mySpace ? "My Space" : (currentFamily?.family?.name ?? "Family");
+  const currentAvatarBg = mySpace ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
+  const currentInitials = mySpace ? (me.initials || "?") : currentLabel.slice(0, 2).toUpperCase();
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      {/* Trigger */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -54,7 +58,6 @@ export default function ContextSwitcher() {
         </div>
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", left: 0,
@@ -65,10 +68,13 @@ export default function ContextSwitcher() {
         }}>
           {me.families.map(f => {
             const isActive = currentContext === f.family_id;
-            const isPF = !!(f.family as unknown as { is_personal?: boolean })?.is_personal;
-            const name = isPF ? "My Space" : (f.family?.name ?? "Family");
-            const initials = isPF ? (me.initials || "?") : name.slice(0, 2).toUpperCase();
-            const bg = isPF ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
+            const mine = isMySpace(f);
+            const fam = f.family as unknown as { is_personal?: boolean; owner_email?: string; name?: string } | null;
+            const isPF = !!fam?.is_personal;
+            const name = mine ? "My Space" : (fam?.name ?? "Family");
+            const initials = mine ? (me.initials || "?") : name.slice(0, 2).toUpperCase();
+            const bg = mine ? me.color : isPF ? "linear-gradient(135deg,#B5A8D4,#A8C8E8)" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
+            const sublabel = mine ? "Private" : isPF ? `${fam?.owner_email?.split("@")[0]}'s space` : f.role;
             return (
               <button
                 key={f.family_id}
@@ -89,9 +95,7 @@ export default function ContextSwitcher() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{name}</div>
-                  <div style={{ fontSize: 11, color: "var(--ink-subtle)", textTransform: "capitalize" }}>
-                    {isPF ? "Private" : f.role}
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--ink-subtle)", textTransform: "capitalize" }}>{sublabel}</div>
                 </div>
                 {isActive && <span style={{ fontSize: 14, color: "var(--ink-subtle)" }}>✓</span>}
               </button>
@@ -99,15 +103,12 @@ export default function ContextSwitcher() {
           })}
 
           <div style={{ height: 1, background: "var(--border)", margin: "4px 8px" }}/>
-          <a
-            href="/dashboard/join"
-            style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 12px", borderRadius: 10,
-              color: "var(--ink-subtle)", textDecoration: "none",
-              fontSize: 12, fontWeight: 600,
-            }}
-          >
+          <a href="/dashboard/join" style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 12px", borderRadius: 10,
+            color: "var(--ink-subtle)", textDecoration: "none",
+            fontSize: 12, fontWeight: 600,
+          }}>
             <div style={{
               width: 34, height: 34, borderRadius: 10,
               border: "2px dashed var(--tan-deep)",

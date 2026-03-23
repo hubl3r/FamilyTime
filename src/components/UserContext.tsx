@@ -7,7 +7,7 @@ export type FamilyMembership = {
   family_id:  string;
   role:       string;
   joined_at:  string | null;
-  family:     { id: string; name: string; invite_code: string; created_at: string; is_personal?: boolean } | null;
+  family:     { id: string; name: string; invite_code: string; created_at: string; is_personal?: boolean; owner_email?: string } | null;
 };
 
 export type MeData = {
