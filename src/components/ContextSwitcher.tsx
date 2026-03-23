@@ -4,11 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { useUser } from "./UserContext";
 
 export default function ContextSwitcher() {
-  const { me, currentContext, currentFamily, isPersonal, switchContext } = useUser();
+  const { me, currentContext, currentFamily, switchContext } = useUser();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -19,16 +18,15 @@ export default function ContextSwitcher() {
 
   if (!me) return null;
 
-  const label = isPersonal
-    ? "Personal"
-    : currentFamily?.family?.name ?? "Family";
-
-  const avatarBg = isPersonal ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
-  const avatarContent = isPersonal ? (me.initials || "?") : "🏡";
+  // Current family display
+  const isPersonalFamily = !!(currentFamily?.family as unknown as { is_personal?: boolean })?.is_personal;
+  const currentLabel = isPersonalFamily ? "My Space" : (currentFamily?.family?.name ?? "Family");
+  const currentAvatarBg = isPersonalFamily ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
+  const currentInitials = isPersonalFamily ? (me.initials || "?") : currentLabel.slice(0, 2).toUpperCase();
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      {/* Trigger button */}
+      {/* Trigger */}
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -40,23 +38,20 @@ export default function ContextSwitcher() {
           boxShadow: "0 2px 8px rgba(100,60,60,0.06)",
         }}
       >
-        {/* Avatar */}
         <div style={{
           width: 28, height: 28, borderRadius: 8,
-          background: avatarBg,
+          background: currentAvatarBg,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: isPersonal ? 11 : 14, fontWeight: 800, color: "#fff",
-          flexShrink: 0,
+          fontSize: 11, fontWeight: 800, color: "#fff", flexShrink: 0,
         }}>
-          {avatarContent}
+          {currentInitials}
         </div>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", lineHeight: 1.2 }}>{label}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", lineHeight: 1.2 }}>{currentLabel}</div>
           <div style={{ fontSize: 10, color: "var(--ink-subtle)", lineHeight: 1.2 }}>
-            {isPersonal ? "Personal view" : `${currentFamily?.role ?? ""} · Switch ▾`}
+            {currentFamily?.role ?? ""} · Switch ▾
           </div>
         </div>
-        <span style={{ fontSize: 10, color: "var(--ink-subtle)", marginLeft: 2 }}>▾</span>
       </button>
 
       {/* Dropdown */}
@@ -68,45 +63,12 @@ export default function ContextSwitcher() {
           boxShadow: "0 8px 32px rgba(100,60,60,0.14)",
           zIndex: 200,
         }}>
-          {/* Personal option */}
-          <button
-            onClick={() => { switchContext("personal"); setOpen(false); }}
-            style={{
-              width: "100%", display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 12px", borderRadius: 10, border: "none",
-              background: isPersonal ? "var(--accent-soft)" : "transparent",
-              cursor: "pointer", fontFamily: "inherit", textAlign: "left",
-            }}
-          >
-            <div style={{
-              width: 34, height: 34, borderRadius: 10,
-              background: me.color,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 12, fontWeight: 800, color: "#fff", flexShrink: 0,
-            }}>
-              {me.initials || "?"}
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
-                {me.first_name} {me.last_name}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--ink-subtle)" }}>Personal view</div>
-            </div>
-            {isPersonal && <span style={{ marginLeft: "auto", fontSize: 14 }}>✓</span>}
-          </button>
-
-          {/* Divider */}
-          {me.families.length > 0 && (
-            <div style={{ height: 1, background: "var(--border)", margin: "4px 8px" }}/>
-          )}
-
-          {/* Family options */}
           {me.families.map(f => {
             const isActive = currentContext === f.family_id;
-            const isPersonalFamily = !!(f.family as unknown as { is_personal?: boolean })?.is_personal;
-            const name = isPersonalFamily ? "My Space" : (f.family?.name ?? "Family");
-            const initials = isPersonalFamily ? (me.initials || "?") : name.slice(0, 2).toUpperCase();
-            const avatarBg = isPersonalFamily ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
+            const isPF = !!(f.family as unknown as { is_personal?: boolean })?.is_personal;
+            const name = isPF ? "My Space" : (f.family?.name ?? "Family");
+            const initials = isPF ? (me.initials || "?") : name.slice(0, 2).toUpperCase();
+            const bg = isPF ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
             return (
               <button
                 key={f.family_id}
@@ -119,25 +81,23 @@ export default function ContextSwitcher() {
                 }}
               >
                 <div style={{
-                  width: 34, height: 34, borderRadius: 10,
-                  background: avatarBg,
+                  width: 34, height: 34, borderRadius: 10, background: bg,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 13, fontWeight: 800, color: "#fff", flexShrink: 0,
+                  fontSize: 12, fontWeight: 800, color: "#fff", flexShrink: 0,
                 }}>
                   {initials}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{name}</div>
                   <div style={{ fontSize: 11, color: "var(--ink-subtle)", textTransform: "capitalize" }}>
-                    {f.role}
+                    {isPF ? "Private" : f.role}
                   </div>
                 </div>
-                {isActive && <span style={{ marginLeft: "auto", fontSize: 14 }}>✓</span>}
+                {isActive && <span style={{ fontSize: 14, color: "var(--ink-subtle)" }}>✓</span>}
               </button>
             );
           })}
 
-          {/* Join another family */}
           <div style={{ height: 1, background: "var(--border)", margin: "4px 8px" }}/>
           <a
             href="/join"

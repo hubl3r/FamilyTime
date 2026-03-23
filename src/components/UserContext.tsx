@@ -62,10 +62,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data: MeData = await res.json();
         setMe(data);
-        // Default to personal family (My Space) on first load
+        // Default to personal family (My Space) on first load, keep current if already set
         setCurrentContext(prev => {
-          if (prev !== "personal") return prev; // already set
-          const personalFamily = data.families.find(f => f.family?.is_personal);
+          if (prev !== "personal" && data.families.find(f => f.family_id === prev)) return prev;
+          const personalFamily = data.families.find(f => (f.family as unknown as { is_personal?: boolean })?.is_personal);
           return personalFamily ? personalFamily.family_id : data.primary_family_id;
         });
       }
