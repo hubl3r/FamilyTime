@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { validatePassword, passwordStrength } from "@/lib/validatePassword";
 
 type InviteInfo = {
   member_id:   string;
@@ -11,6 +12,7 @@ type InviteInfo = {
   email:       string;
   role:        string;
   family_name: string;
+  has_account: boolean;
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -22,23 +24,26 @@ function AcceptInviteForm() {
   const router = useRouter();
   const token = searchParams.get("token") ?? "";
 
-  const [info, setInfo]       = useState<InviteInfo | null>(null);
-  const [loadErr, setLoadErr] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  const [name, setName]           = useState("");
-  const [password, setPassword]   = useState("");
-  const [password2, setPassword2] = useState("");
+  const [info, setInfo]         = useState<InviteInfo | null>(null);
+  const [loadErr, setLoadErr]   = useState("");
+  const [loading, setLoading]   = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError]         = useState("");
+  const [error, setError]       = useState("");
 
-  // Load invite info on mount
+  // New user fields
+  const [name, setName]         = useState("");
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+
+  // Existing user fields
+  const [existingPassword, setExistingPassword] = useState("");
+
   useEffect(() => {
     if (!token) { setLoadErr("No invite token found."); setLoading(false); return; }
     fetch(`/api/accept-invite?token=${encodeURIComponent(token)}`)
       .then(r => r.json())
       .then(data => {
-        if (data.error) { setLoadErr(data.error); }
+        if (data.error) setLoadErr(data.error);
         else {
           setInfo(data);
           setName(`${data.first_name} ${data.last_name}`);
@@ -48,11 +53,13 @@ function AcceptInviteForm() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const submit = async () => {
-    if (!password || password.length < 8) { setError("Password must be at least 8 characters"); return; }
+  // Flow A: New user — create account + accept invite
+  const submitNewUser = async () => {
+    const { valid, errors } = validatePassword(password);
+    if (!valid) { setError(errors[0]); return; }
     if (password !== password2) { setError("Passwords don't match"); return; }
-    setError(""); setSubmitting(true);
 
+    setSubmitting(true); setError("");
     try {
       const res = await fetch("/api/accept-invite", {
         method: "POST",
@@ -62,16 +69,11 @@ function AcceptInviteForm() {
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Something went wrong"); setSubmitting(false); return; }
 
-      // Auto sign in with the new credentials
+      // Auto sign-in
       const signInRes = await signIn("credentials", {
-        redirect: false,
-        email: info!.email,
-        password,
-        action: "login",
+        redirect: false, email: info!.email, password, action: "login",
       });
-
       if (signInRes?.error) {
-        // Sign-in failed but account was created — send to sign-in page
         router.push("/sign-in?invited=1");
       } else {
         router.push("/dashboard");
@@ -82,13 +84,56 @@ function AcceptInviteForm() {
     }
   };
 
-  // ── Shared styles ──────────────────────────────────────────
+  // Flow B: Existing user — sign in, then auto-link to family
+  const submitExistingUser = async () => {
+    if (!existingPassword) { setError("Please enter your password"); return; }
+    setSubmitting(true); setError("");
+    try {
+      // Sign them in first
+      const signInRes = await signIn("credentials", {
+        redirect: false, email: info!.email, password: existingPassword, action: "login",
+      });
+      if (signInRes?.error) {
+        if (signInRes.error === "EMAIL_NOT_VERIFIED") {
+          setError("Please verify your email before signing in.");
+        } else {
+          setError("Incorrect password. Try again or reset your password.");
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      // Now link the family membership via PATCH
+      const patchRes = await fetch("/api/accept-invite", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (!patchRes.ok) {
+        const d = await patchRes.json();
+        setError(d.error ?? "Failed to join family");
+        setSubmitting(false);
+        return;
+      }
+
+      router.push("/dashboard");
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "12px 14px",
     border: "1.5px solid #EDE0D8", borderRadius: 10,
     fontSize: 14, outline: "none", color: "#3D2C2C",
     background: "#FFFCFA", fontFamily: "'Nunito',sans-serif",
     boxSizing: "border-box",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 11, fontWeight: 800,
+    color: "#8B7070", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6,
   };
 
   return (
@@ -98,18 +143,17 @@ function AcceptInviteForm() {
       display: "flex", alignItems: "center", justifyContent: "center",
       padding: 24, fontFamily: "'Nunito',sans-serif",
     }}>
-      {/* Decorative blobs */}
       <div style={{ position:"fixed", top:-100, right:-100, width:400, height:400, borderRadius:"50%", background:"rgba(181,168,212,0.2)", pointerEvents:"none" }}/>
       <div style={{ position:"fixed", bottom:-80, left:-80, width:300, height:300, borderRadius:"50%", background:"rgba(232,165,165,0.2)", pointerEvents:"none" }}/>
 
       <div style={{
         background: "rgba(255,252,250,0.92)", backdropFilter: "blur(20px)",
         border: "1.5px solid #EDE0D8", borderRadius: 24,
-        padding: "40px 36px", width: "100%", maxWidth: 420,
+        padding: "40px 36px", width: "100%", maxWidth: 440,
         boxShadow: "0 20px 60px rgba(100,60,60,0.12)",
       }}>
         {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ textAlign:"center", marginBottom:24 }}>
           <div style={{ width:56, height:56, borderRadius:18, background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px", fontSize:26 }}>🏡</div>
           <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:600, color:"#3D2C2C", margin:0 }}>FamilyTime</h1>
         </div>
@@ -132,7 +176,6 @@ function AcceptInviteForm() {
           </div>
         )}
 
-        {/* Invite form */}
         {!loading && info && (
           <>
             {/* Family banner */}
@@ -141,11 +184,9 @@ function AcceptInviteForm() {
               border: "1.5px solid #EDE0D8", borderRadius: 14,
               padding: "16px", marginBottom: 24, textAlign: "center",
             }}>
-              <div style={{ fontSize: 13, color: "#8B7070", marginBottom: 4 }}>You've been invited to join</div>
-              <div style={{ fontFamily:"'Fraunces',serif", fontSize: 20, fontWeight: 600, color: "#3D2C2C", marginBottom: 6 }}>
-                {info.family_name}
-              </div>
-              <div style={{ display:"flex", justifyContent:"center", gap:8, flexWrap:"wrap" }}>
+              <div style={{ fontSize:13, color:"#8B7070", marginBottom:4 }}>You've been invited to join</div>
+              <div style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:600, color:"#3D2C2C", marginBottom:6 }}>{info.family_name}</div>
+              <div style={{ display:"flex", justifyContent:"center", gap:8, alignItems:"center" }}>
                 <span style={{ fontSize:12, color:"#8B7070" }}>{info.first_name} {info.last_name}</span>
                 <span style={{ fontSize:12, color:"#D4C4B4" }}>·</span>
                 <span style={{ fontSize:11, fontWeight:700, color:"#8B7BB8", background:"#EDE9F7", padding:"2px 10px", borderRadius:20 }}>
@@ -154,90 +195,127 @@ function AcceptInviteForm() {
               </div>
             </div>
 
-            <p style={{ fontSize:13, color:"#8B7070", marginBottom:20, textAlign:"center" }}>
-              Create a password to set up your account
-            </p>
-
             {error && (
               <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#DC2626", marginBottom:16, fontWeight:600 }}>
                 {error}
               </div>
             )}
 
-            {/* Name */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#8B7070", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Your Name</label>
-              <input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                style={inputStyle}
-                placeholder="Jane Smith"
-              />
-            </div>
+            {/* ── Flow B: Existing account ── */}
+            {info.has_account ? (
+              <>
+                <div style={{ background:"#E3EFF8", border:"1px solid #A8C8E840", borderRadius:10, padding:"12px 14px", marginBottom:20, fontSize:13, color:"#3D5A8A", fontWeight:600 }}>
+                  👋 You already have a FamilyTime account with this email. Sign in below to join <strong>{info.family_name}</strong>.
+                </div>
 
-            {/* Email (read-only) */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#8B7070", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Email</label>
-              <input
-                value={info.email}
-                readOnly
-                style={{ ...inputStyle, background:"#F7F4F2", color:"#B8A8A8", cursor:"not-allowed" }}
-              />
-            </div>
+                <div style={{ marginBottom:14 }}>
+                  <label style={labelStyle}>Email</label>
+                  <input value={info.email} readOnly style={{ ...inputStyle, background:"#F7F4F2", color:"#B8A8A8", cursor:"not-allowed" }}/>
+                </div>
 
-            {/* Password */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#8B7070", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && submit()}
-                style={inputStyle}
-                placeholder="At least 8 characters"
-              />
-            </div>
+                <div style={{ marginBottom:24 }}>
+                  <label style={labelStyle}>Password</label>
+                  <input
+                    type="password" value={existingPassword}
+                    onChange={e => setExistingPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submitExistingUser()}
+                    placeholder="Your FamilyTime password"
+                    style={inputStyle} autoFocus
+                  />
+                  <div style={{ textAlign:"right", marginTop:6 }}>
+                    <a href="/reset-password" style={{ fontSize:11, color:"#B8A8A8", textDecoration:"none" }}>Forgot password?</a>
+                  </div>
+                </div>
 
-            {/* Confirm password */}
-            <div style={{ marginBottom:24 }}>
-              <label style={{ display:"block", fontSize:11, fontWeight:800, color:"#8B7070", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Confirm Password</label>
-              <input
-                type="password"
-                value={password2}
-                onChange={e => setPassword2(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && submit()}
-                style={{
-                  ...inputStyle,
-                  borderColor: password2 && password !== password2 ? "#FECACA" : "#EDE0D8",
-                }}
-                placeholder="Repeat your password"
-              />
-              {password2 && password !== password2 && (
-                <div style={{ fontSize:12, color:"#DC2626", marginTop:4, fontWeight:600 }}>Passwords don't match</div>
-              )}
-            </div>
+                <button
+                  onClick={submitExistingUser}
+                  disabled={submitting || !existingPassword}
+                  style={{
+                    width:"100%", padding:13,
+                    background: submitting || !existingPassword ? "#EDE0D8" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
+                    color:"#fff", border:"none", borderRadius:12,
+                    fontSize:15, fontWeight:800, cursor: submitting || !existingPassword ? "not-allowed" : "pointer",
+                    fontFamily:"'Nunito',sans-serif",
+                  }}
+                >
+                  {submitting ? "Signing in & joining..." : `Sign In & Join ${info.family_name} 🏡`}
+                </button>
+              </>
+            ) : (
+              /* ── Flow A: New user ── */
+              <>
+                <p style={{ fontSize:13, color:"#8B7070", marginBottom:20, textAlign:"center" }}>
+                  Create your account to get started
+                </p>
 
-            <button
-              onClick={submit}
-              disabled={submitting || !password || password !== password2}
-              style={{
-                width:"100%", padding:13,
-                background: submitting || !password || password !== password2
-                  ? "#EDE0D8"
-                  : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
-                color:"#fff", border:"none", borderRadius:12,
-                fontSize:15, fontWeight:800,
-                cursor: submitting || !password || password !== password2 ? "not-allowed" : "pointer",
-                fontFamily:"'Nunito',sans-serif",
-                boxShadow: "0 4px 16px rgba(181,168,212,0.4)",
-              }}
-            >
-              {submitting ? "Setting up your account..." : "Join the Family 🏡"}
-            </button>
+                <div style={{ marginBottom:14 }}>
+                  <label style={labelStyle}>Your Name</label>
+                  <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="Jane Smith"/>
+                </div>
+
+                <div style={{ marginBottom:14 }}>
+                  <label style={labelStyle}>Email</label>
+                  <input value={info.email} readOnly style={{ ...inputStyle, background:"#F7F4F2", color:"#B8A8A8", cursor:"not-allowed" }}/>
+                </div>
+
+                <div style={{ marginBottom:6 }}>
+                  <label style={labelStyle}>Password</label>
+                  <input
+                    type="password" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="At least 8 characters" style={inputStyle} autoFocus
+                  />
+                </div>
+
+                {/* Password strength bar */}
+                {password.length > 0 && (() => {
+                  const strength = passwordStrength(password);
+                  const { errors } = validatePassword(password);
+                  const colors: Record<string,string> = { weak:"#DC2626", fair:"#D97706", strong:"#059669", excellent:"#059669" };
+                  const widths: Record<string,string> = { weak:"25%", fair:"50%", strong:"75%", excellent:"100%" };
+                  return (
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ height:4, background:"#EDE0D8", borderRadius:4, overflow:"hidden", marginBottom:5 }}>
+                        <div style={{ height:"100%", width:widths[strength], background:colors[strength], borderRadius:4, transition:"width 0.3s" }}/>
+                      </div>
+                      {errors.length > 0 && <div style={{ fontSize:11, color:"#8B7070" }}>Missing: {errors.join(" · ")}</div>}
+                    </div>
+                  );
+                })()}
+
+                <div style={{ marginBottom:24 }}>
+                  <label style={labelStyle}>Confirm Password</label>
+                  <input
+                    type="password" value={password2}
+                    onChange={e => setPassword2(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submitNewUser()}
+                    placeholder="Repeat your password"
+                    style={{ ...inputStyle, borderColor: password2 && password !== password2 ? "#FECACA" : "#EDE0D8" }}
+                  />
+                  {password2 && password !== password2 && (
+                    <div style={{ fontSize:12, color:"#DC2626", marginTop:4, fontWeight:600 }}>Passwords don't match</div>
+                  )}
+                </div>
+
+                <button
+                  onClick={submitNewUser}
+                  disabled={submitting || !password || password !== password2}
+                  style={{
+                    width:"100%", padding:13,
+                    background: submitting || !password || password !== password2 ? "#EDE0D8" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
+                    color:"#fff", border:"none", borderRadius:12,
+                    fontSize:15, fontWeight:800,
+                    cursor: submitting || !password || password !== password2 ? "not-allowed" : "pointer",
+                    fontFamily:"'Nunito',sans-serif",
+                  }}
+                >
+                  {submitting ? "Setting up your account..." : "Join the Family 🏡"}
+                </button>
+              </>
+            )}
 
             <div style={{ textAlign:"center", fontSize:12, color:"#B8A8A8", marginTop:16 }}>
-              Already have an account?{" "}
-              <a href="/sign-in" style={{ color:"#B5A8D4", fontWeight:700, textDecoration:"none" }}>Sign in instead</a>
+              <a href="/sign-in" style={{ color:"#B5A8D4", fontWeight:700, textDecoration:"none" }}>Back to sign in</a>
             </div>
           </>
         )}

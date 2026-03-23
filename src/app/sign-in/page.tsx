@@ -4,6 +4,7 @@ import React, { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { validatePassword, passwordStrength } from "@/lib/validatePassword";
 
 function SignInForm() {
   const router = useRouter();
@@ -20,9 +21,19 @@ function SignInForm() {
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
   const [justRegistered, setJustRegistered] = useState(false);
+  const [resendLoading, setResendLoading]   = useState(false);
+  const [resendDone, setResendDone]         = useState(false);
+  const [pendingEmail, setPendingEmail]     = useState("");
 
   const submit = async () => {
     setError(""); setLoading(true);
+
+    // Client-side password validation on signup
+    if (mode === "signup") {
+      const { valid, errors } = validatePassword(password);
+      if (!valid) { setError(errors[0]); setLoading(false); return; }
+    }
+
     const res = await signIn("credentials", {
       redirect: false, email, password, name,
       action: mode === "signup" ? "register" : "login",
@@ -30,9 +41,13 @@ function SignInForm() {
     setLoading(false);
     if (res?.error) {
       if (res.error === "EMAIL_EXISTS") {
-        // Account exists — switch to sign-in mode with a helpful message
         setMode("signin");
         setError("An account with this email already exists. Sign in below, or reset your password.");
+        return;
+      }
+      if (res.error === "EMAIL_NOT_VERIFIED") {
+        setPendingEmail(email);
+        setError("EMAIL_NOT_VERIFIED");
         return;
       }
       setError(res.error);
@@ -43,6 +58,17 @@ function SignInForm() {
       return;
     }
     router.push("/dashboard");
+  };
+
+  const resendVerification = async () => {
+    setResendLoading(true);
+    await fetch("/api/resend-verification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: pendingEmail }),
+    });
+    setResendLoading(false);
+    setResendDone(true);
   };
 
   const field = (label: string, type: string, value: string, set: (v: string) => void, ph: string) => (
@@ -101,7 +127,46 @@ function SignInForm() {
         {field("Email", "email", email, setEmail, "you@example.com")}
         {field("Password", "password", password, setPassword, "••••••••")}
 
-        {error && (
+        {/* Password strength indicator (signup only) */}
+        {mode === "signup" && password.length > 0 && (() => {
+          const strength = passwordStrength(password);
+          const { errors } = validatePassword(password);
+          const colors: Record<string, string> = { weak:"#DC2626", fair:"#D97706", strong:"#059669", excellent:"#059669" };
+          const widths: Record<string, string> = { weak:"25%", fair:"50%", strong:"75%", excellent:"100%" };
+          return (
+            <div style={{ marginBottom:12, marginTop:-8 }}>
+              <div style={{ height:4, background:"#EDE0D8", borderRadius:4, overflow:"hidden", marginBottom:6 }}>
+                <div style={{ height:"100%", width:widths[strength], background:colors[strength], borderRadius:4, transition:"width 0.3s" }}/>
+              </div>
+              {errors.length > 0 && (
+                <div style={{ fontSize:11, color:"#8B7070" }}>
+                  Missing: {errors.join(" · ")}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Email not verified error — special case with resend option */}
+        {error === "EMAIL_NOT_VERIFIED" ? (
+          <div style={{ background:"#FBF0E6", border:"1px solid #F0C4A060", borderRadius:10, padding:"14px", marginBottom:16 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"#8B5E3C", marginBottom:6 }}>📬 Email not verified</div>
+            <div style={{ fontSize:12, color:"#8B7070", marginBottom:10 }}>
+              You must verify your email before signing in. Check your inbox for the verification link.
+            </div>
+            {resendDone ? (
+              <div style={{ fontSize:12, color:"#059669", fontWeight:600 }}>✅ New verification email sent!</div>
+            ) : (
+              <button
+                onClick={resendVerification}
+                disabled={resendLoading}
+                style={{ fontSize:12, fontWeight:700, color:"#B5A8D4", background:"none", border:"none", cursor:"pointer", padding:0, fontFamily:"inherit" }}
+              >
+                {resendLoading ? "Sending..." : "Resend verification email →"}
+              </button>
+            )}
+          </div>
+        ) : error && (
           <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#DC2626", marginBottom:16 }}>
             {error}
           </div>

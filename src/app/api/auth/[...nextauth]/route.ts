@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendVerificationEmail } from "@/lib/email";
+import { validatePassword } from "@/lib/validatePassword";
 import { createPersonalFamily } from "@/lib/createPersonalFamily";
 
 export const authOptions: NextAuthOptions = {
@@ -22,7 +23,11 @@ export const authOptions: NextAuthOptions = {
         const email = credentials.email.toLowerCase().trim();
 
         if (credentials.action === "register") {
-          // Check if already exists — give a clear error so UI can redirect to sign in
+          // Validate password strength
+          const { valid, errors } = validatePassword(credentials.password);
+          if (!valid) throw new Error(errors[0]);
+
+          // Check if already exists
           const { data: existing } = await supabaseAdmin
             .from("users")
             .select("id")
@@ -64,13 +69,16 @@ export const authOptions: NextAuthOptions = {
           // Login — look up by email, validate password
           const { data: user } = await supabaseAdmin
             .from("users")
-            .select("id, email, name, password")
+            .select("id, email, name, password, email_verified")
             .eq("email", email)
             .maybeSingle();
           if (!user) throw new Error("No account found with that email");
 
           const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) throw new Error("Incorrect password");
+
+          // Block login until email is verified
+          if (!user.email_verified) throw new Error("EMAIL_NOT_VERIFIED");
 
           // Link any unlinked family_members rows (e.g. invited before registering)
           await supabaseAdmin
