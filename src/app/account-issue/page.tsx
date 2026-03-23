@@ -1,11 +1,10 @@
 // src/app/account-issue/page.tsx
-// Shown when a signed-in user has no active family membership.
-// This can happen if they were accidentally deactivated.
 "use client";
+import { Suspense } from "react";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 
-export default function AccountIssuePage() {
+function AccountIssueContent() {
   const { data: session } = useSession();
 
   return (
@@ -32,29 +31,26 @@ export default function AccountIssuePage() {
         <p style={{ fontSize: 13, color: "#8B7070", lineHeight: 1.7, marginBottom: 28 }}>
           This can happen if your membership was deactivated. Please contact the family owner to restore access, or join a new family.
         </p>
-
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Link href="/join" style={{
-            display: "block", padding: "13px",
-            background: "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
-            color: "#fff", borderRadius: 12, textDecoration: "none",
-            fontSize: 15, fontWeight: 800,
-          }}>
+          <Link href="/join" style={{ display:"block", padding:"13px", background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", color:"#fff", borderRadius:12, textDecoration:"none", fontSize:15, fontWeight:800 }}>
             Join a Family
           </Link>
           <button
             onClick={() => signOut({ callbackUrl: "/sign-in" })}
-            style={{
-              padding: "13px", background: "#fff",
-              border: "1.5px solid #EDE0D8", borderRadius: 12,
-              fontSize: 14, fontWeight: 700, color: "#8B7070",
-              cursor: "pointer", fontFamily: "inherit",
-            }}
+            style={{ padding:"13px", background:"#fff", border:"1.5px solid #EDE0D8", borderRadius:12, fontSize:14, fontWeight:700, color:"#8B7070", cursor:"pointer", fontFamily:"inherit" }}
           >
             Sign Out
           </button>
         </div>
       </div>
     </main>
+  );
+}
+
+export default function AccountIssuePage() {
+  return (
+    <Suspense>
+      <AccountIssueContent />
+    </Suspense>
   );
 }
