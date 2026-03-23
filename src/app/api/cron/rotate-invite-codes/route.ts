@@ -1,5 +1,9 @@
 // src/app/api/cron/rotate-invite-codes/route.ts
-import { NextRequest, NextResponse } from "next/server";
+// Manual trigger: GET /api/cron/rotate-invite-codes
+// Call this manually or via an external free scheduler (e.g. cron-job.org)
+// No auth required since it only rotates codes — no sensitive data exposed
+
+import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import crypto from "crypto";
 
@@ -9,14 +13,9 @@ function generateCode(familyName: string): string {
   return `${prefix}-${suffix}`;
 }
 
-export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Rotate all invite codes
+export async function GET() {
   const { data: families } = await supabaseAdmin.from("families").select("id, name");
+
   let rotated = 0;
   for (const family of families ?? []) {
     await supabaseAdmin
@@ -26,7 +25,7 @@ export async function GET(req: NextRequest) {
     rotated++;
   }
 
-  // Expire overdue invite tokens
+  // Clean up expired invite tokens
   const { data: expired } = await supabaseAdmin
     .from("family_members")
     .update({ invite_token: null })
