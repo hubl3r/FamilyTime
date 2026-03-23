@@ -1,6 +1,6 @@
 // src/app/join/page.tsx
 "use client";
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -9,12 +9,12 @@ type FamilyResult = {
   family_id: string;
   family_name: string;
   member_count: number;
-  invite_code: string; // partial — just for matching display
+  invite_code: string;
 };
 
 type Step = "landing" | "code" | "search" | "confirm" | "done";
 
-export default function JoinFamilyPage() {
+function JoinFamilyForm() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const isSignedIn = status === "authenticated";
@@ -404,5 +404,13 @@ export default function JoinFamilyPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function JoinFamilyPage() {
+  return (
+    <Suspense>
+      <JoinFamilyForm />
+    </Suspense>
   );
 }
