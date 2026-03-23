@@ -355,18 +355,24 @@ function MemberFormModal({ member, onClose, onSave, saving, accent }: {
 }
 
 // ── Member Detail Drawer ──────────────────────────────────────
-function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInvite, accent }: {
+function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInvite, accent, currentUser }: {
   member: FamilyMember;
   onClose: () => void;
   onEdit: () => void;
   onDeactivate: () => void;
   onResendInvite: () => void;
   accent: string;
+  currentUser: FamilyMember | null;
 }) {
   const [tab, setTab] = useState<"profile" | "medical" | "emergency">("profile");
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const roleCfg = ROLE_CONFIG[member.role];
   const age = calcAge(member.birthday);
+
+  // Block deactivation if: member is owner, or member is the current user
+  const isOwner = member.role === "owner";
+  const isSelf  = currentUser?.id === member.id;
+  const canDeactivate = !isOwner && !isSelf;
 
   const TABS = [
     { id: "profile", label: "Profile" },
@@ -453,7 +459,8 @@ function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInv
                 </div>
               )}
 
-              {/* Deactivate */}
+              {/* Deactivate — hidden for owner and self */}
+              {canDeactivate && (
               <div style={{ marginTop: 24 }}>
                 {!confirmDeactivate ? (
                   <button onClick={() => setConfirmDeactivate(true)} style={{ width: "100%", padding: 12, background: "#FFF0F0", border: "1.5px solid #E8A5A560", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "#C97B7B", cursor: "pointer", fontFamily: "inherit" }}>
@@ -474,6 +481,7 @@ function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInv
                   </div>
                 )}
               </div>
+              )}
             </>
           )}
 
@@ -732,23 +740,22 @@ export default function MembersPage() {
 
   const loadMembers = useCallback(async () => {
     try {
-      const [membersRes, familyRes, sessionRes] = await Promise.all([
+      const [membersRes, familyRes, meRes] = await Promise.all([
         fetch("/api/members"),
         fetch("/api/family"),
-        fetch("/api/auth/session"),
+        fetch("/api/me"),
       ]);
       if (!membersRes.ok) throw new Error("Failed to load members");
       const membersData: FamilyMember[] = await membersRes.json();
       setMembers(membersData);
       if (familyRes.ok) setFamily(await familyRes.json());
-      // Identify the current logged-in user within the members list
-      if (sessionRes.ok) {
-        const session = await sessionRes.json();
-        const email = session?.user?.email?.toLowerCase().trim();
-        if (email) {
-          const me = membersData.find(m => m.email.toLowerCase() === email) ?? null;
-          setCurrentUser(me);
-        }
+      // Use /api/me to reliably identify the current user by member_id
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        const primaryMemberId = meData.primary_member_id;
+        // Find them in the current family's member list by email (most reliable cross-family)
+        const me = membersData.find(m => m.email.toLowerCase() === meData.email?.toLowerCase()) ?? null;
+        setCurrentUser(me);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -1066,6 +1073,7 @@ export default function MembersPage() {
           onDeactivate={() => handleDeactivate(selectedMember)}
           onResendInvite={() => handleResendInvite(selectedMember)}
           accent={accent}
+          currentUser={currentUser}
         />
       )}
       {/* Form modal: show when editing (null = new member, FamilyMember = editing existing) */}

@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session) redirect("/sign-in");
 
   const member = await getSessionMember();
-  if (!member) redirect("/join");
+  if (!member) redirect("/account-issue");
 
   return (
     <ThemeProvider>

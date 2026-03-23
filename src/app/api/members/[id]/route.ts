@@ -37,6 +37,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const body = await req.json();
 
+  // Hard blocks — cannot be bypassed
+  if (body.is_active === false) {
+    if (target.role === "owner") {
+      return NextResponse.json({ error: "The owner account cannot be deactivated" }, { status: 403 });
+    }
+    if (isSelf) {
+      return NextResponse.json({ error: "You cannot deactivate your own account" }, { status: 403 });
+    }
+  }
+
   if (body.role === "owner" && sessionMember.role !== "owner") {
     return NextResponse.json({ error: "Only owners can assign the owner role" }, { status: 403 });
   }

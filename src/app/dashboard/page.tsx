@@ -112,6 +112,15 @@ function FamilyView({ familyId }: { familyId: string }) {
 
 function PersonalView() {
   const { me } = useUser();
+  const [pendingRequests, setPendingRequests] = useState<{id:string;status:string;created_at:string;families:{name:string}|null}[]>([]);
+
+  useEffect(() => {
+    fetch("/api/me/requests")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setPendingRequests((data ?? []).filter((r: {status:string}) => r.status === "pending")))
+      .catch(() => {});
+  }, []);
+
   if (!me) return null;
 
   const age = me.birthday ? (() => {
@@ -151,11 +160,34 @@ function PersonalView() {
             </div>
           </div>
         ))}
-        <Link href="/join" style={{ display:"flex", alignItems:"center", gap:14, background:"rgba(255,255,255,0.6)", border:"1.5px dashed var(--tan-deep)", borderRadius:16, padding:"16px", textDecoration:"none", color:"var(--ink-subtle)", fontSize:14, fontWeight:600 }}>
+        <Link href="/dashboard/join" style={{ display:"flex", alignItems:"center", gap:14, background:"rgba(255,255,255,0.6)", border:"1.5px dashed var(--tan-deep)", borderRadius:16, padding:"16px", textDecoration:"none", color:"var(--ink-subtle)", fontSize:14, fontWeight:600 }}>
           <div style={{ width:44, height:44, borderRadius:14, border:"2px dashed var(--tan-deep)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>+</div>
           Join another family
         </Link>
       </div>
+
+      {/* Pending join requests */}
+      {pendingRequests.length > 0 && (
+        <>
+          <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:500, color:"var(--ink)", marginBottom:14 }}>Pending Requests</h3>
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:24 }}>
+            {pendingRequests.map(r => (
+              <div key={r.id} style={{ background:"rgba(255,255,255,0.85)", border:"1.5px solid #F0C4A060", borderRadius:16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14 }}>
+                <div style={{ width:44, height:44, borderRadius:14, background:"#FBF0E6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>⏳</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:"var(--ink)" }}>
+                    {(r.families as unknown as {name:string}|null)?.name ?? "Unknown family"}
+                  </div>
+                  <div style={{ fontSize:12, color:"var(--ink-subtle)", marginTop:2 }}>
+                    Request pending approval · {new Date(r.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                  </div>
+                </div>
+                <span style={{ fontSize:11, fontWeight:700, color:"#A8977A", background:"#FBF0E6", padding:"3px 10px", borderRadius:20 }}>Pending</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {(me.blood_type||me.allergies||me.medications||me.emergency_contact_name) && (
         <>
