@@ -100,7 +100,7 @@ export default function ContextSwitcher() {
 
           <div style={{ height: 1, background: "var(--border)", margin: "4px 8px" }}/>
           <a
-            href="/join"
+            href="/dashboard/join"
             style={{
               display: "flex", alignItems: "center", gap: 10,
               padding: "10px 12px", borderRadius: 10,
