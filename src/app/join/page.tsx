@@ -1,8 +1,9 @@
 // src/app/join/page.tsx
 "use client";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type FamilyResult = {
   family_id: string;
@@ -15,6 +16,9 @@ type Step = "landing" | "code" | "search" | "confirm" | "done";
 
 export default function JoinFamilyPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
+  const isSignedIn = status === "authenticated";
+
   const [step, setStep] = useState<Step>("landing");
   const [code, setCode] = useState("");
   const [searchQ, setSearchQ] = useState("");
@@ -25,10 +29,27 @@ export default function JoinFamilyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Personal info for the join request
+  // Personal info — only needed when not signed in
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
+  const [lastName,  setLastName]  = useState("");
+  const [email,     setEmail]     = useState("");
+
+  // When signed in, fetch profile to pre-fill name/email
+  useEffect(() => {
+    if (!isSignedIn) return;
+    fetch("/api/me")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setFirstName(data.first_name ?? "");
+          setLastName(data.last_name ?? "");
+          setEmail(data.email ?? session?.user?.email ?? "");
+        } else {
+          setEmail(session?.user?.email ?? "");
+        }
+      })
+      .catch(() => setEmail(session?.user?.email ?? ""));
+  }, [isSignedIn, session]);
 
   const handleCodeLookup = async () => {
     if (code.trim().length < 3) {
@@ -69,18 +90,20 @@ export default function JoinFamilyPage() {
   }, [searchQ]);
 
   const handleSubmitRequest = async () => {
-    if (!selectedFamily || !firstName.trim() || !lastName.trim() || !email.trim()) return;
+    if (!selectedFamily) return;
+    // When signed in, name/email are pre-filled from profile — no manual entry needed
+    if (!isSignedIn && (!firstName.trim() || !lastName.trim() || !email.trim())) return;
     setSubmitting(true);
     try {
       const res = await fetch("/api/join/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          family_id: selectedFamily.family_id,
+          family_id:  selectedFamily.family_id,
           first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          email: email.trim().toLowerCase(),
-          message: message.trim(),
+          last_name:  lastName.trim(),
+          email:      email.trim().toLowerCase(),
+          message:    message.trim(),
         }),
       });
       if (!res.ok) {
@@ -293,24 +316,38 @@ export default function JoinFamilyPage() {
               </div>
             </div>
 
-            <p style={{ fontSize: 13, color: "#8B7070", marginBottom: 18, lineHeight: 1.6 }}>
-              Tell them a little about yourself so they can verify who you are.
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-              <div>
-                <label style={labelStyle}>First Name <span style={{ color: "#E8A5A5" }}>*</span></label>
-                <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Jane" style={inputStyle}/>
+            {/* When signed in — show who they are, no need to re-enter */}
+            {isSignedIn ? (
+              <div style={{ background:"rgba(255,255,255,0.8)", border:"1.5px solid #EDE0D8", borderRadius:12, padding:"14px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:40, height:40, borderRadius:12, background:"#E8A5A5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:800, color:"#fff", flexShrink:0 }}>
+                  {(firstName[0]??"")}{ (lastName[0]??"")}
+                </div>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#3D2C2C" }}>{firstName} {lastName}</div>
+                  <div style={{ fontSize:12, color:"#8B7070" }}>{email}</div>
+                </div>
               </div>
-              <div>
-                <label style={labelStyle}>Last Name <span style={{ color: "#E8A5A5" }}>*</span></label>
-                <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Smith" style={inputStyle}/>
-              </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={labelStyle}>Email Address <span style={{ color: "#E8A5A5" }}>*</span></label>
-              <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="jane@example.com" style={inputStyle}/>
-            </div>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: "#8B7070", marginBottom: 18, lineHeight: 1.6 }}>
+                  Tell them a little about yourself so they can verify who you are.
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                  <div>
+                    <label style={labelStyle}>First Name <span style={{ color: "#E8A5A5" }}>*</span></label>
+                    <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Jane" style={inputStyle}/>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Last Name <span style={{ color: "#E8A5A5" }}>*</span></label>
+                    <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Smith" style={inputStyle}/>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={labelStyle}>Email Address <span style={{ color: "#E8A5A5" }}>*</span></label>
+                  <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="jane@example.com" style={inputStyle}/>
+                </div>
+              </>
+            )}
             <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Message (optional)</label>
               <textarea
@@ -328,15 +365,15 @@ export default function JoinFamilyPage() {
 
             <button
               onClick={handleSubmitRequest}
-              disabled={submitting || !firstName.trim() || !lastName.trim() || !email.trim()}
+              disabled={submitting || (!isSignedIn && (!firstName.trim() || !lastName.trim() || !email.trim()))}
               style={{
                 width: "100%", padding: 13,
-                background: submitting || !firstName.trim() || !lastName.trim() || !email.trim()
+                background: submitting || (!isSignedIn && (!firstName.trim() || !lastName.trim() || !email.trim()))
                   ? "#EDE0D8"
                   : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
                 color: "#fff", border: "none", borderRadius: 12,
                 fontSize: 15, fontWeight: 800,
-                cursor: submitting || !firstName.trim() || !lastName.trim() || !email.trim() ? "not-allowed" : "pointer",
+                cursor: submitting || (!isSignedIn && (!firstName.trim() || !lastName.trim() || !email.trim())) ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
               }}
             >
@@ -355,13 +392,13 @@ export default function JoinFamilyPage() {
             <p style={{ fontSize: 14, color: "#8B7070", lineHeight: 1.7, marginBottom: 28 }}>
               Your join request has been sent to <strong>{selectedFamily?.family_name}</strong>. You'll get an email once a family admin approves it.
             </p>
-            <Link href="/sign-in" style={{
+            <Link href={isSignedIn ? "/dashboard" : "/sign-in"} style={{
               display: "block", width: "100%", padding: 13,
               background: "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
               color: "#fff", borderRadius: 12, textDecoration: "none",
               fontSize: 15, fontWeight: 800, fontFamily: "inherit",
             }}>
-              Back to Sign In
+              {isSignedIn ? "Back to Dashboard" : "Back to Sign In"}
             </Link>
           </div>
         )}
