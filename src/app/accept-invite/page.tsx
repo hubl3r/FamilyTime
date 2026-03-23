@@ -74,7 +74,6 @@ function AcceptInviteForm() {
       setSubmitting(false);
     }
   };
-  }, [token]);
 
   // Flow A: New user — create account + accept invite
   const submitNewUser = async () => {
