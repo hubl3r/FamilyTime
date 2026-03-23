@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendVerificationEmail } from "@/lib/email";
+import { createPersonalFamily } from "@/lib/createPersonalFamily";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -21,18 +22,18 @@ export const authOptions: NextAuthOptions = {
         const email = credentials.email.toLowerCase().trim();
 
         if (credentials.action === "register") {
-          // Check if already exists
+          // Check if already exists — give a clear error so UI can redirect to sign in
           const { data: existing } = await supabaseAdmin
             .from("users")
             .select("id")
             .eq("email", email)
-            .single();
-          if (existing) throw new Error("Email already registered");
+            .maybeSingle();
+          if (existing) throw new Error("EMAIL_EXISTS");
 
-          // Hash and store
           const hashed = await bcrypt.hash(credentials.password, 10);
-          const name = credentials.name || email.split("@")[0];
+          const name = credentials.name?.trim() || email.split("@")[0];
           const verify_token = crypto.randomBytes(32).toString("hex");
+
           const { data: user, error } = await supabaseAdmin
             .from("users")
             .insert({ email, password: hashed, name, verify_token, email_verified: false })
@@ -40,45 +41,81 @@ export const authOptions: NextAuthOptions = {
             .single();
           if (error || !user) throw new Error("Failed to create account");
 
-          // Send verification email (non-blocking)
+          // Create personal family
+          const nameParts = name.trim().split(" ");
+          const firstName = nameParts[0] ?? name;
+          const lastName  = nameParts.slice(1).join(" ") || firstName;
+          await createPersonalFamily({ userId: user.id, email, firstName, lastName });
+
+          // Link any pending family_members rows that were created via invite
+          await supabaseAdmin
+            .from("family_members")
+            .update({ nextauth_user_id: user.id, invite_status: "accepted", joined_at: new Date().toISOString() })
+            .eq("email", email)
+            .is("nextauth_user_id", null);
+
           try {
             await sendVerificationEmail({ to: email, name, verifyToken: verify_token });
-          } catch (emailErr) {
-            console.error("[VERIFY] Email failed:", emailErr);
-          }
+          } catch (e) { console.error("[VERIFY] Email failed:", e); }
 
           return { id: user.id, email: user.email, name: user.name };
 
         } else {
-          // Login
+          // Login — look up by email, validate password
           const { data: user } = await supabaseAdmin
             .from("users")
             .select("id, email, name, password")
             .eq("email", email)
-            .single();
-          if (!user) throw new Error("No account found");
+            .maybeSingle();
+          if (!user) throw new Error("No account found with that email");
 
           const valid = await bcrypt.compare(credentials.password, user.password);
           if (!valid) throw new Error("Incorrect password");
 
-          // Link this user to their family_members row if not already linked,
-          // and mark invite as accepted
+          // Link any unlinked family_members rows (e.g. invited before registering)
           await supabaseAdmin
             .from("family_members")
-            .update({
-              nextauth_user_id: user.id,
-              invite_status: "accepted",
-              joined_at: new Date().toISOString(),
-            })
+            .update({ nextauth_user_id: user.id, invite_status: "accepted", joined_at: new Date().toISOString() })
             .eq("email", email)
-            .is("nextauth_user_id", null); // only update if not already linked
+            .is("nextauth_user_id", null);
+
+          // Ensure they have a personal family
+          const { data: personalCheck } = await supabaseAdmin
+            .from("families")
+            .select("id")
+            .eq("owner_email", email)
+            .eq("is_personal", true)
+            .maybeSingle();
+
+          if (!personalCheck) {
+            // Get their name from family_members if available
+            const { data: memberRow } = await supabaseAdmin
+              .from("family_members")
+              .select("first_name, last_name")
+              .eq("nextauth_user_id", user.id)
+              .maybeSingle();
+            const firstName = memberRow?.first_name ?? user.name?.split(" ")[0] ?? "User";
+            const lastName  = memberRow?.last_name  ?? user.name?.split(" ").slice(1).join(" ") ?? firstName;
+            await createPersonalFamily({ userId: user.id, email, firstName, lastName });
+          }
 
           return { id: user.id, email: user.email, name: user.name };
         }
       },
     }),
   ],
-  pages:   { signIn: "/sign-in" },
+  callbacks: {
+    // Store user.id in the JWT so we can use it server-side
+    async jwt({ token, user }) {
+      if (user) token.userId = user.id;
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.userId) (session.user as { id?: string }).id = token.userId as string;
+      return session;
+    },
+  },
+  pages:  { signIn: "/sign-in" },
   session: { strategy: "jwt" },
   secret:  process.env.NEXTAUTH_SECRET,
 };

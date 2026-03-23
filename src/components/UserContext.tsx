@@ -7,7 +7,7 @@ export type FamilyMembership = {
   family_id:  string;
   role:       string;
   joined_at:  string | null;
-  family:     { id: string; name: string; invite_code: string; created_at: string } | null;
+  family:     { id: string; name: string; invite_code: string; created_at: string; is_personal?: boolean } | null;
 };
 
 export type MeData = {
@@ -62,10 +62,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data: MeData = await res.json();
         setMe(data);
-        // Default to primary family on first load
-        setCurrentContext(prev =>
-          prev === "personal" ? data.primary_family_id : prev
-        );
+        // Default to personal family (My Space) on first load
+        setCurrentContext(prev => {
+          if (prev !== "personal") return prev; // already set
+          const personalFamily = data.families.find(f => f.family?.is_personal);
+          return personalFamily ? personalFamily.family_id : data.primary_family_id;
+        });
       }
     } catch { /* silently fail */ }
     finally { setLoading(false); }

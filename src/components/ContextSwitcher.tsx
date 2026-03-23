@@ -103,8 +103,10 @@ export default function ContextSwitcher() {
           {/* Family options */}
           {me.families.map(f => {
             const isActive = currentContext === f.family_id;
-            const name = f.family?.name ?? "Family";
-            const initials = name.slice(0, 2).toUpperCase();
+            const isPersonalFamily = !!(f.family as unknown as { is_personal?: boolean })?.is_personal;
+            const name = isPersonalFamily ? "My Space" : (f.family?.name ?? "Family");
+            const initials = isPersonalFamily ? (me.initials || "?") : name.slice(0, 2).toUpperCase();
+            const avatarBg = isPersonalFamily ? me.color : "linear-gradient(135deg,#E8A5A5,#B5A8D4)";
             return (
               <button
                 key={f.family_id}
@@ -118,7 +120,7 @@ export default function ContextSwitcher() {
               >
                 <div style={{
                   width: 34, height: 34, borderRadius: 10,
-                  background: "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
+                  background: avatarBg,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 13, fontWeight: 800, color: "#fff", flexShrink: 0,
                 }}>

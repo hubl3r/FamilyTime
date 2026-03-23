@@ -11,6 +11,7 @@ function SignInForm() {
   const justVerified = searchParams.get("verified") === "1";
   const tokenError   = searchParams.get("error") === "invalid-token";
   const justInvited  = searchParams.get("invited") === "1";
+  const justReset    = searchParams.get("reset") === "1";
 
   const [mode, setMode]         = useState<"signin"|"signup">("signin");
   const [name, setName]         = useState("");
@@ -27,7 +28,16 @@ function SignInForm() {
       action: mode === "signup" ? "register" : "login",
     });
     setLoading(false);
-    if (res?.error) { setError(res.error); return; }
+    if (res?.error) {
+      if (res.error === "EMAIL_EXISTS") {
+        // Account exists — switch to sign-in mode with a helpful message
+        setMode("signin");
+        setError("An account with this email already exists. Sign in below, or reset your password.");
+        return;
+      }
+      setError(res.error);
+      return;
+    }
     if (mode === "signup") {
       setJustRegistered(true);
       return;
@@ -52,6 +62,11 @@ function SignInForm() {
 
       <div style={{ background:"rgba(255,252,250,0.92)", backdropFilter:"blur(20px)", border:"1.5px solid #EDE0D8", borderRadius:24, padding:"40px 36px", width:"100%", maxWidth:420, boxShadow:"0 20px 60px rgba(100,60,60,0.12)", position:"relative" }}>
         {/* Status banners */}
+        {justReset && (
+          <div style={{ background:"#E3EFE1", border:"1px solid #A8C5A060", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#3D6B3A", fontWeight:600 }}>
+            ✅ Password updated! Sign in with your new password.
+          </div>
+        )}
         {justInvited && (
           <div style={{ background:"#EDE9F7", border:"1px solid #B5A8D460", borderRadius:10, padding:"12px 16px", marginBottom:20, fontSize:13, color:"#6B4FA8", fontWeight:600 }}>
             🏡 Account created! Sign in to access your family hub.
@@ -96,6 +111,14 @@ function SignInForm() {
           style={{ width:"100%", padding:"13px", background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", color:"white", border:"none", borderRadius:12, fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:"0 4px 16px rgba(181,168,212,0.4)", marginBottom:16 }}>
           {loading ? "One moment..." : mode === "signin" ? "Sign In ✨" : "Create Account ✨"}
         </button>
+
+        {mode === "signin" && (
+          <div style={{ textAlign:"center", marginBottom:8 }}>
+            <a href="/reset-password" style={{ fontSize:12, color:"#B8A8A8", textDecoration:"none", fontWeight:600 }}>
+              Forgot your password?
+            </a>
+          </div>
+        )}
 
         <div style={{ textAlign:"center", fontSize:13, color:"#8B7070", marginBottom:16 }}>
           {mode === "signin" ? "New here? " : "Already have an account? "}

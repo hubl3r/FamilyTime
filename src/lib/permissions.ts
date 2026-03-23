@@ -23,35 +23,66 @@ export interface SessionMember {
 }
 
 /**
+ * Get the session user's ID from the JWT.
+ * This is the tenant identifier — one per email, globally unique.
+ */
+async function getSessionUserId(): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  // user.id is stored in the JWT via the session callback
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (userId) return userId;
+  // Fallback: look up by email if id not yet in JWT (e.g. old sessions)
+  if (!session?.user?.email) return null;
+  const { data } = await supabaseServer
+    .from("users")
+    .select("id")
+    .eq("email", session.user.email.toLowerCase().trim())
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+/**
  * Get the authenticated family member from the NextAuth session.
- * Returns null if not authenticated or not in a family.
+ * Looks up by nextauth_user_id (tenant ID), not email.
+ * Returns the primary family membership (personal family preferred).
  */
 export async function getSessionMember(): Promise<SessionMember | null> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return null;
+  const userId = await getSessionUserId();
+  if (!userId) return null;
 
+  // Prefer personal family, fall back to first active membership
   const { data, error } = await supabaseServer
     .from("family_members")
-    .select("id, family_id, role, email, first_name")
-    .eq("email", session.user.email.toLowerCase().trim())
+    .select("id, family_id, role, email, first_name, families:family_id(is_personal)")
+    .eq("nextauth_user_id", userId)
     .eq("is_active", true)
-    .maybeSingle();
+    .order("joined_at", { ascending: true });
 
-  if (error || !data) return null;
-  return data as SessionMember;
+  if (error || !data || data.length === 0) return null;
+
+  // Pick personal family first, otherwise first membership
+  const personal = data.find(m => (m.families as unknown as { is_personal?: boolean } | null)?.is_personal);
+  const primary  = personal ?? data[0];
+
+  return {
+    id:         primary.id,
+    family_id:  primary.family_id,
+    role:       primary.role as MemberRole,
+    email:      primary.email,
+    first_name: primary.first_name,
+  };
 }
 
 /**
  * Like getSessionMember(), but respects an optional ?family_id= query param.
- * If family_id is provided, validates the user belongs to that family and returns
- * their membership record for it. Falls back to primary family if not provided.
+ * Validates the user actually belongs to the requested family.
  * Use this in all family-scoped API routes to support multi-family context switching.
  */
-export async function getSessionMemberForFamily(req: { url?: string; nextUrl?: { searchParams: URLSearchParams } }): Promise<SessionMember | null> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) return null;
-
-  const email = session.user.email.toLowerCase().trim();
+export async function getSessionMemberForFamily(
+  req: { url?: string; nextUrl?: { searchParams: URLSearchParams } }
+): Promise<SessionMember | null> {
+  const userId = await getSessionUserId();
+  if (!userId) return null;
 
   // Extract requested family_id from query params
   let requestedFamilyId: string | null = null;
@@ -66,7 +97,7 @@ export async function getSessionMemberForFamily(req: { url?: string; nextUrl?: {
   let query = supabaseServer
     .from("family_members")
     .select("id, family_id, role, email, first_name")
-    .eq("email", email)
+    .eq("nextauth_user_id", userId)
     .eq("is_active", true);
 
   if (requestedFamilyId) {

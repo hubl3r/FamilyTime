@@ -1,5 +1,5 @@
 // src/app/api/me/route.ts
-// GET /api/me — returns the current user's member record + all families they belong to
+// GET /api/me — returns the current user's profile + all family memberships
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -8,13 +8,27 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+
+  // Get user ID from JWT (set via session callback)
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (!userId && !session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const email = session.user.email.toLowerCase().trim();
+  // Look up user record to get ID if not in JWT yet
+  let resolvedUserId = userId;
+  if (!resolvedUserId && session?.user?.email) {
+    const { data: userRow } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("email", session.user.email.toLowerCase().trim())
+      .maybeSingle();
+    resolvedUserId = userRow?.id;
+  }
 
-  // Get all family_members rows for this email (could be multiple families)
+  if (!resolvedUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Get all family memberships for this user by their user ID
   const { data: memberships, error } = await supabaseAdmin
     .from("family_members")
     .select(`
@@ -24,35 +38,34 @@ export async function GET() {
       emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
       created_at, joined_at,
       families:family_id (
-        id, name, invite_code, is_searchable, created_at
+        id, name, invite_code, is_searchable, is_personal, created_at
       )
     `)
-    .eq("email", email)
+    .eq("nextauth_user_id", resolvedUserId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (!memberships || memberships.length === 0) {
     return NextResponse.json({ error: "No family memberships found" }, { status: 404 });
   }
 
-  // Build the response — one entry per family membership
+  // Build family list
   const families = memberships.map(m => ({
-    member_id:   m.id,
-    family_id:   m.family_id,
-    family:      m.families,
-    role:        m.role,
-    joined_at:   m.joined_at,
+    member_id:  m.id,
+    family_id:  m.family_id,
+    family:     m.families,
+    role:       m.role,
+    joined_at:  m.joined_at,
   }));
 
-  // Primary membership = first one joined (or owner role if exists)
-  const primary = memberships.find(m => m.role === "owner") ?? memberships[0];
+  // Primary = personal family, else first joined
+  const primary = memberships.find(m =>
+    (m.families as unknown as { is_personal?: boolean } | null)?.is_personal
+  ) ?? memberships[0];
 
   return NextResponse.json({
-    // Personal info (same across all families)
     email:        primary.email,
     first_name:   primary.first_name,
     last_name:    primary.last_name,
@@ -69,9 +82,7 @@ export async function GET() {
     emergency_contact_name:     primary.emergency_contact_name,
     emergency_contact_phone:    primary.emergency_contact_phone,
     emergency_contact_relation: primary.emergency_contact_relation,
-    // All families this person belongs to
     families,
-    // Convenience: primary family
     primary_family_id: primary.family_id,
     primary_member_id: primary.id,
   });
