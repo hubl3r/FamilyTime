@@ -1,19 +1,20 @@
 // src/app/api/accept-invite/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { validatePassword } from "@/lib/validatePassword";
+import { sendJoinRequestNotification } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import { createPersonalFamily } from "@/lib/createPersonalFamily";
-import { validatePassword } from "@/lib/validatePassword";
 
 // GET /api/accept-invite?token=xxx
-// Returns invite info + whether the email already has an account
+// Validates token (including expiry) and returns invite info
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token")?.trim();
   if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
   const { data: member, error } = await supabaseAdmin
     .from("family_members")
-    .select("id, first_name, last_name, email, role, invite_status, families:family_id(id, name)")
+    .select("id, first_name, last_name, email, role, invite_status, invite_expires_at, families:family_id(id, name)")
     .eq("invite_token", token)
     .eq("is_active", true)
     .maybeSingle();
@@ -22,11 +23,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 404 });
   }
 
+  // Check expiry
+  if (member.invite_expires_at && new Date(member.invite_expires_at) < new Date()) {
+    return NextResponse.json({ error: "This invite link has expired. Ask the family owner to send a new one." }, { status: 410 });
+  }
+
   if (member.invite_status === "accepted") {
     return NextResponse.json({ error: "This invite has already been accepted" }, { status: 409 });
   }
 
-  // Check if this email already has an account
   const { data: existingUser } = await supabaseAdmin
     .from("users")
     .select("id")
@@ -34,30 +39,28 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   return NextResponse.json({
-    member_id:        member.id,
-    first_name:       member.first_name,
-    last_name:        member.last_name,
-    email:            member.email,
-    role:             member.role,
-    family_name:      ((member.families as unknown as { name: string }[])?.[0]?.name) ?? "Your Family",
-    has_account:      !!existingUser, // key flag — drives which flow the UI shows
+    member_id:   member.id,
+    first_name:  member.first_name,
+    last_name:   member.last_name,
+    email:       member.email,
+    role:        member.role,
+    family_name: ((member.families as unknown as { name: string }[])?.[0]?.name) ?? "Your Family",
+    family_id:   ((member.families as unknown as { id: string }[])?.[0]?.id) ?? null,
+    has_account: !!existingUser,
   });
 }
 
 // POST /api/accept-invite
-// Two modes:
-//   1. New user (no account): create users row + link + personal family
-//   2. Existing user (has account): just link the family_members row to their existing user
+// Creates account if needed, then creates a PENDING join request (requires owner approval)
+// Token is invalidated immediately after use (single-use)
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { token, password, name } = body;
-
   if (!token) return NextResponse.json({ error: "Token is required" }, { status: 400 });
 
-  // Look up the invite
   const { data: member, error: memberErr } = await supabaseAdmin
     .from("family_members")
-    .select("id, email, first_name, last_name, invite_status, is_active, nextauth_user_id, family_id")
+    .select("id, email, first_name, last_name, invite_status, is_active, invite_expires_at, family_id")
     .eq("invite_token", token)
     .eq("is_active", true)
     .maybeSingle();
@@ -66,13 +69,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 404 });
   }
 
+  if (member.invite_expires_at && new Date(member.invite_expires_at) < new Date()) {
+    return NextResponse.json({ error: "This invite link has expired. Ask the family owner to send a new one." }, { status: 410 });
+  }
+
   if (member.invite_status === "accepted") {
     return NextResponse.json({ error: "This invite has already been accepted" }, { status: 409 });
   }
 
   const email = member.email.toLowerCase().trim();
 
-  // Check if account already exists
+  // Check for existing account
   const { data: existingUser } = await supabaseAdmin
     .from("users")
     .select("id")
@@ -82,60 +89,79 @@ export async function POST(req: NextRequest) {
   let userId: string;
 
   if (existingUser) {
-    // Existing user — no password needed, just link them
-    // (They signed in via the app's "join from within" flow which handles auth separately)
     userId = existingUser.id;
   } else {
-    // New user — password required
     if (!password) return NextResponse.json({ error: "Password is required" }, { status: 400 });
-
     const { valid, errors } = validatePassword(password);
     if (!valid) return NextResponse.json({ error: errors[0] }, { status: 400 });
 
     const displayName = name?.trim() || `${member.first_name} ${member.last_name}`;
     const hashed = await bcrypt.hash(password, 10);
-
     const { data: newUser, error: userErr } = await supabaseAdmin
       .from("users")
       .insert({ email, name: displayName, password: hashed, email_verified: true })
       .select("id")
       .single();
 
-    if (userErr || !newUser) {
-      return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
-    }
+    if (userErr || !newUser) return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
     userId = newUser.id;
-  }
 
-  // Link family_members row to the user and mark accepted
-  const { error: updateErr } = await supabaseAdmin
-    .from("family_members")
-    .update({
-      nextauth_user_id: userId,
-      invite_status:    "accepted",
-      joined_at:        new Date().toISOString(),
-      invite_token:     null,
-      updated_at:       new Date().toISOString(),
-    })
-    .eq("id", member.id);
-
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
-
-  // Create personal family for new users
-  if (!existingUser) {
+    // Create personal family for new users
     await createPersonalFamily({
-      userId,
-      email,
+      userId, email,
       firstName: member.first_name,
       lastName:  member.last_name,
     });
   }
 
-  return NextResponse.json({ success: true, email, is_new_user: !existingUser });
+  // Invalidate token immediately (single-use) but keep invite_status as pending
+  await supabaseAdmin
+    .from("family_members")
+    .update({
+      nextauth_user_id: userId,
+      invite_token:     null, // single-use — invalidate now
+      invite_status:    "pending", // stays pending until owner approves
+      updated_at:       new Date().toISOString(),
+    })
+    .eq("id", member.id);
+
+  // Get family info for notification
+  const { data: family } = await supabaseAdmin
+    .from("families")
+    .select("id, name")
+    .eq("id", member.family_id)
+    .single();
+
+  // Notify all owners/admins
+  try {
+    const { data: admins } = await supabaseAdmin
+      .from("family_members")
+      .select("email, first_name")
+      .eq("family_id", member.family_id)
+      .in("role", ["owner", "admin"])
+      .eq("is_active", true);
+
+    const reviewUrl = `${process.env.NEXTAUTH_URL}/dashboard/members`;
+
+    for (const admin of admins ?? []) {
+      await sendJoinRequestNotification({
+        to:             admin.email,
+        adminName:      admin.first_name,
+        requesterName:  `${member.first_name} ${member.last_name}`,
+        requesterEmail: email,
+        familyName:     family?.name ?? "your family",
+        via:            "invite_link",
+        reviewUrl,
+      });
+    }
+  } catch (e) {
+    console.error("[INVITE] Admin notification failed:", e);
+  }
+
+  return NextResponse.json({ success: true, email, pending: true });
 }
 
-// PATCH /api/accept-invite — existing logged-in user accepts invite from within the app
-// Called from dashboard when user clicks "Join [Family]" on a pending invite
+// PATCH /api/accept-invite — logged-in user joins via one-click (still creates pending request)
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { token } = body;
@@ -143,20 +169,21 @@ export async function PATCH(req: NextRequest) {
 
   const { data: member, error: memberErr } = await supabaseAdmin
     .from("family_members")
-    .select("id, email, first_name, last_name, invite_status, is_active")
+    .select("id, email, first_name, last_name, invite_status, is_active, invite_expires_at, family_id")
     .eq("invite_token", token)
     .eq("is_active", true)
     .maybeSingle();
 
-  if (memberErr || !member) {
-    return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 404 });
+  if (memberErr || !member) return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 404 });
+
+  if (member.invite_expires_at && new Date(member.invite_expires_at) < new Date()) {
+    return NextResponse.json({ error: "This invite link has expired" }, { status: 410 });
   }
 
   if (member.invite_status === "accepted") {
     return NextResponse.json({ error: "Already accepted" }, { status: 409 });
   }
 
-  // Look up the user by email
   const { data: user } = await supabaseAdmin
     .from("users")
     .select("id")
@@ -165,16 +192,42 @@ export async function PATCH(req: NextRequest) {
 
   if (!user) return NextResponse.json({ error: "No account found" }, { status: 404 });
 
+  // Invalidate token, link user, keep pending
   await supabaseAdmin
     .from("family_members")
     .update({
       nextauth_user_id: user.id,
-      invite_status:    "accepted",
-      joined_at:        new Date().toISOString(),
       invite_token:     null,
+      invite_status:    "pending",
       updated_at:       new Date().toISOString(),
     })
     .eq("id", member.id);
 
-  return NextResponse.json({ success: true });
+  // Notify admins
+  try {
+    const { data: family } = await supabaseAdmin.from("families").select("name").eq("id", member.family_id).single();
+    const { data: admins } = await supabaseAdmin
+      .from("family_members")
+      .select("email, first_name")
+      .eq("family_id", member.family_id)
+      .in("role", ["owner", "admin"])
+      .eq("is_active", true);
+
+    const reviewUrl = `${process.env.NEXTAUTH_URL}/dashboard/members`;
+    for (const admin of admins ?? []) {
+      await sendJoinRequestNotification({
+        to:             admin.email,
+        adminName:      admin.first_name,
+        requesterName:  `${member.first_name} ${member.last_name}`,
+        requesterEmail: member.email,
+        familyName:     family?.name ?? "your family",
+        via:            "invite_link",
+        reviewUrl,
+      });
+    }
+  } catch (e) {
+    console.error("[INVITE] Admin notification failed:", e);
+  }
+
+  return NextResponse.json({ success: true, pending: true });
 }

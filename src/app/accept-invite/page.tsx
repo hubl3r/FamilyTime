@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { validatePassword, passwordStrength } from "@/lib/validatePassword";
 
 type InviteInfo = {
@@ -23,6 +23,8 @@ function AcceptInviteForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token") ?? "";
+  const { data: session, status } = useSession();
+  const isSignedIn = status === "authenticated";
 
   const [info, setInfo]         = useState<InviteInfo | null>(null);
   const [loadErr, setLoadErr]   = useState("");
@@ -35,7 +37,7 @@ function AcceptInviteForm() {
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
 
-  // Existing user fields
+  // Existing user (not signed in) fields
   const [existingPassword, setExistingPassword] = useState("");
 
   useEffect(() => {
@@ -51,6 +53,27 @@ function AcceptInviteForm() {
       })
       .catch(() => setLoadErr("Failed to load invite. Please try again."))
       .finally(() => setLoading(false));
+  }, [token]);
+
+  const [submitted, setSubmitted] = useState(false);
+
+  // Flow C: Already signed in — one-click join (pending approval)
+  const submitSignedIn = async () => {
+    setSubmitting(true); setError("");
+    try {
+      const res = await fetch("/api/accept-invite", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Failed to submit request"); setSubmitting(false); return; }
+      setSubmitted(true);
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
+  };
   }, [token]);
 
   // Flow A: New user — create account + accept invite
@@ -69,14 +92,14 @@ function AcceptInviteForm() {
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Something went wrong"); setSubmitting(false); return; }
 
-      // Auto sign-in
+      // Account created — sign them in, then show pending message
       const signInRes = await signIn("credentials", {
         redirect: false, email: info!.email, password, action: "login",
       });
       if (signInRes?.error) {
         router.push("/sign-in?invited=1");
       } else {
-        router.push("/dashboard");
+        setSubmitted(true);
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -111,12 +134,12 @@ function AcceptInviteForm() {
       });
       if (!patchRes.ok) {
         const d = await patchRes.json();
-        setError(d.error ?? "Failed to join family");
+        setError(d.error ?? "Failed to submit request");
         setSubmitting(false);
         return;
       }
 
-      router.push("/dashboard");
+      setSubmitted(true);
     } catch {
       setError("Something went wrong. Please try again.");
       setSubmitting(false);
@@ -195,14 +218,49 @@ function AcceptInviteForm() {
               </div>
             </div>
 
+            {/* ── Pending approval success ── */}
+            {submitted ? (
+              <div style={{ textAlign:"center", padding:"8px 0" }}>
+                <div style={{ fontSize:48, marginBottom:16 }}>🎉</div>
+                <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:600, color:"#3D2C2C", marginBottom:8 }}>
+                  Request sent!
+                </h2>
+                <p style={{ fontSize:13, color:"#8B7070", lineHeight:1.6, marginBottom:24 }}>
+                  Your request to join <strong>{info.family_name}</strong> has been submitted. The family owner will review it and you'll receive an email once approved.
+                </p>
+                <a href="/dashboard" style={{ display:"inline-block", padding:"12px 24px", background:"linear-gradient(135deg,#E8A5A5,#B5A8D4)", color:"#fff", borderRadius:12, textDecoration:"none", fontSize:14, fontWeight:800, fontFamily:"'Nunito',sans-serif" }}>
+                  Go to My Space →
+                </a>
+              </div>
+            ) : (
+              <>
             {error && (
               <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:8, padding:"10px 14px", fontSize:13, color:"#DC2626", marginBottom:16, fontWeight:600 }}>
                 {error}
               </div>
             )}
 
-            {/* ── Flow B: Existing account ── */}
-            {info.has_account ? (
+            {/* ── Flow C: Already signed in ── */}
+            {isSignedIn ? (
+              <>
+                <div style={{ background:"#E3EFE1", border:"1px solid #A8C5A040", borderRadius:10, padding:"12px 14px", marginBottom:20, fontSize:13, color:"#3D6B3A", fontWeight:600 }}>
+                  👋 Signed in as <strong>{session?.user?.email}</strong>
+                </div>
+                <button
+                  onClick={submitSignedIn}
+                  disabled={submitting}
+                  style={{
+                    width:"100%", padding:13,
+                    background: submitting ? "#EDE0D8" : "linear-gradient(135deg,#E8A5A5,#B5A8D4)",
+                    color:"#fff", border:"none", borderRadius:12,
+                    fontSize:15, fontWeight:800, cursor: submitting ? "not-allowed" : "pointer",
+                    fontFamily:"'Nunito',sans-serif",
+                  }}
+                >
+                  {submitting ? "Joining..." : `Join ${info.family_name} 🏡`}
+                </button>
+              </>
+            ) : info.has_account ? (
               <>
                 <div style={{ background:"#E3EFF8", border:"1px solid #A8C8E840", borderRadius:10, padding:"12px 14px", marginBottom:20, fontSize:13, color:"#3D5A8A", fontWeight:600 }}>
                   👋 You already have a FamilyTime account with this email. Sign in below to join <strong>{info.family_name}</strong>.
@@ -317,6 +375,8 @@ function AcceptInviteForm() {
             <div style={{ textAlign:"center", fontSize:12, color:"#B8A8A8", marginTop:16 }}>
               <a href="/sign-in" style={{ color:"#B5A8D4", fontWeight:700, textDecoration:"none" }}>Back to sign in</a>
             </div>
+          </>
+            )} {/* end !submitted */}
           </>
         )}
       </div>

@@ -152,7 +152,36 @@ export async function sendResendInviteEmail({
   });
 }
 
-// ─── 5. Email verification on signup ─────────────────────────────────────────
+// ─── 6. Join request notification to admins ──────────────────────────────────
+
+export async function sendJoinRequestNotification({
+  to, adminName, requesterName, requesterEmail, familyName, via, reviewUrl,
+}: {
+  to: string;
+  adminName: string;
+  requesterName: string;
+  requesterEmail: string;
+  familyName: string;
+  via: "invite_link" | "search" | "invite_code";
+  reviewUrl: string;
+}) {
+  const viaLabel = via === "invite_link" ? "an invite link" : via === "invite_code" ? "an invite code" : "family search";
+  const html = emailShell(`
+    <p>Hi ${adminName},</p>
+    <p><strong>${requesterName}</strong> (${requesterEmail}) has requested to join <strong>${familyName}</strong> via ${viaLabel}.</p>
+    <p>Review and approve or deny their request:</p>
+    <a href="${reviewUrl}" class="btn">Review Request →</a>
+    <div class="divider"></div>
+    <p class="muted">You can manage all join requests from the Members section of your family hub.</p>
+  `);
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: `${requesterName} wants to join ${familyName} on ${APP_NAME}`,
+    html,
+  });
+}
 
 export async function sendVerificationEmail({
   to, name, verifyToken,

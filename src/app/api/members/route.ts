@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
 
   const initials = `${(first_name[0] ?? "").toUpperCase()}${(last_name[0] ?? "").toUpperCase()}`;
   const invite_token = crypto.randomBytes(32).toString("hex");
+  const invite_expires_at = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const defaultColor = color || "#A8C8E8";
 
   const { data: newMember, error } = await supabaseAdmin
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       is_active: true,
       invite_status: "pending",
       invite_token,
+      invite_expires_at,
       nickname: nickname?.trim() || null,
       bio: bio?.trim() || null,
       birthday: birthday || null,

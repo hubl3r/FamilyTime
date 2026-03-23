@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendJoinRequestNotification } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -79,14 +80,18 @@ export async function POST(req: NextRequest) {
       .in("role", ["owner", "admin"])
       .eq("is_active", true);
 
-    const reviewUrl = `${process.env.NEXTAUTH_URL}/dashboard/members?tab=requests`;
+    const reviewUrl = `${process.env.NEXTAUTH_URL}/dashboard/members`;
 
     for (const admin of admins ?? []) {
-      // TODO: wire up your email provider here (Resend, SendGrid, etc.)
-      console.log(
-        `[JOIN REQUEST] Notify ${admin.first_name} <${admin.email}>: ` +
-        `${first_name} ${last_name} wants to join ${family.name}. Review: ${reviewUrl}`
-      );
+      await sendJoinRequestNotification({
+        to:             admin.email,
+        adminName:      admin.first_name,
+        requesterName:  `${first_name} ${last_name}`,
+        requesterEmail: normalizedEmail,
+        familyName:     family.name,
+        via:            "search",
+        reviewUrl,
+      });
     }
   } catch (emailErr) {
     console.error("[JOIN REQUEST] Notification failed:", emailErr);
