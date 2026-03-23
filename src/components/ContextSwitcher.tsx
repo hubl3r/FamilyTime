@@ -19,9 +19,9 @@ export default function ContextSwitcher() {
   if (!me) return null;
 
   // A family is "My Space" only if it's personal AND owned by the current user
-  function isMySpace(family: typeof currentFamily | typeof me.families[0]) {
-    const f = family as unknown as { family?: { is_personal?: boolean; owner_email?: string } };
-    return !!(f?.family?.is_personal && f?.family?.owner_email === me!.email);
+  function isMySpace(family: unknown) {
+    const f = family as { family?: { is_personal?: boolean; owner_email?: string } } | null;
+    return !!(f?.family?.is_personal && f?.family?.owner_email === me.email);
   }
 
   const mySpace = isMySpace(currentFamily);
