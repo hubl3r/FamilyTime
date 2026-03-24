@@ -119,5 +119,12 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Clean up any join requests so they can be re-invited in future
+  await supabaseAdmin
+    .from("join_requests")
+    .delete()
+    .eq("family_id", sessionMember.family_id)
+    .eq("email", target.email);
+
   return NextResponse.json({ success: true });
 }
