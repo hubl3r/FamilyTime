@@ -355,24 +355,29 @@ function MemberFormModal({ member, onClose, onSave, saving, accent }: {
 }
 
 // ── Member Detail Drawer ──────────────────────────────────────
-function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInvite, accent, currentUser }: {
+function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInvite, accent, currentUser, onRoleChange, onDelete }: {
   member: FamilyMember;
   onClose: () => void;
   onEdit: () => void;
   onDeactivate: () => void;
   onResendInvite: () => void;
+  onRoleChange: (id: string, role: MemberRole) => void;
+  onDelete: (id: string) => void;
   accent: string;
   currentUser: FamilyMember | null;
 }) {
   const [tab, setTab] = useState<"profile" | "medical" | "emergency">("profile");
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [changingRole, setChangingRole] = useState(false);
   const roleCfg = ROLE_CONFIG[member.role];
   const age = calcAge(member.birthday);
 
-  // Block deactivation if: member is owner, or member is the current user
   const isOwner = member.role === "owner";
   const isSelf  = currentUser?.id === member.id;
   const canDeactivate = !isOwner && !isSelf;
+  const canDelete = currentUser?.role === "owner" && !isOwner && !isSelf;
+  const canChangeRole = (currentUser?.role === "owner" || currentUser?.role === "admin") && !isOwner && !isSelf;
 
   const TABS = [
     { id: "profile", label: "Profile" },
@@ -460,8 +465,30 @@ function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInv
               )}
 
               {/* Deactivate — hidden for owner and self */}
+              {/* ── Role Change ── */}
+              {canChangeRole && (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#B8A8A8", marginBottom: 8 }}>Change Role</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(["admin", "member", "child"] as MemberRole[]).map(r => {
+                      const cfg = ROLE_CONFIG[r];
+                      const isActive = member.role === r;
+                      return (
+                        <button key={r} onClick={() => { setChangingRole(true); onRoleChange(member.id, r); }} disabled={isActive || changingRole}
+                          style={{ padding: "6px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: isActive ? "default" : "pointer",
+                            border: `1.5px solid ${isActive ? cfg.color : "#EDE0D8"}`,
+                            background: isActive ? cfg.bg : "#fff", color: isActive ? cfg.color : "#8B7070", fontFamily: "inherit" }}>
+                          {cfg.icon} {cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Deactivate ── */}
               {canDeactivate && (
-              <div style={{ marginTop: 24 }}>
+              <div style={{ marginTop: 16 }}>
                 {!confirmDeactivate ? (
                   <button onClick={() => setConfirmDeactivate(true)} style={{ width: "100%", padding: 12, background: "#FFF0F0", border: "1.5px solid #E8A5A560", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "#C97B7B", cursor: "pointer", fontFamily: "inherit" }}>
                     {member.is_active ? "🚫 Deactivate Member" : "✅ Reactivate Member"}
@@ -481,6 +508,26 @@ function MemberDetailDrawer({ member, onClose, onEdit, onDeactivate, onResendInv
                   </div>
                 )}
               </div>
+              )}
+
+              {/* ── Hard Delete ── */}
+              {canDelete && (
+                <div style={{ marginTop: 12 }}>
+                  {!confirmDelete ? (
+                    <button onClick={() => setConfirmDelete(true)} style={{ width: "100%", padding: 12, background: "#fff", border: "1.5px solid #EDE0D8", borderRadius: 12, fontSize: 13, fontWeight: 700, color: "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>
+                      🗑️ Permanently Remove
+                    </button>
+                  ) : (
+                    <div style={{ background: "#FFF0F0", border: "1.5px solid #E8A5A5", borderRadius: 12, padding: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#C97B7B", marginBottom: 8, textAlign: "center" }}>Permanently remove {member.first_name}?</div>
+                      <div style={{ fontSize: 12, color: "#8B7070", textAlign: "center", marginBottom: 14 }}>This cannot be undone. All their data in this family will be removed.</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: 10, background: "#fff", border: "1.5px solid #EDE0D8", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#8B7070", cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                        <button onClick={() => onDelete(member.id)} style={{ flex: 1, padding: 10, background: "#C97B7B", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", fontFamily: "inherit" }}>Remove</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -821,6 +868,28 @@ export default function MembersPage() {
     }
   };
 
+  const handleRoleChange = async (memberId: string, role: MemberRole) => {
+    try {
+      await fetch(`/api/members/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      await loadMembers();
+      showToast("Role updated");
+    } catch { showToast("Failed to update role"); }
+  };
+
+  const handleDelete = async (memberId: string) => {
+    try {
+      const res = await fetch(`/api/members/${memberId}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); showToast(d.error ?? "Failed to remove member"); return; }
+      setSelectedMember(null);
+      await loadMembers();
+      showToast("Member permanently removed");
+    } catch { showToast("Failed to remove member"); }
+  };
+
   const handleJoinRequestAction = async (requestId: string, action: "approve" | "deny", role = "member") => {
     try {
       const res = await fetch("/api/members/join-requests", {
@@ -1072,6 +1141,8 @@ export default function MembersPage() {
           onEdit={() => setEditingMember(selectedMember)}
           onDeactivate={() => handleDeactivate(selectedMember)}
           onResendInvite={() => handleResendInvite(selectedMember)}
+          onRoleChange={handleRoleChange}
+          onDelete={handleDelete}
           accent={accent}
           currentUser={currentUser}
         />

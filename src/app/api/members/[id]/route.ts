@@ -90,3 +90,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   return NextResponse.json(updated);
 }
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const { id } = await params;
+
+  const sessionMember = await getSessionMember();
+  if (!sessionMember) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Only owner can hard-delete
+  if (sessionMember.role !== "owner") {
+    return NextResponse.json({ error: "Only the owner can permanently remove members" }, { status: 403 });
+  }
+
+  const { data: target, error: fetchErr } = await supabaseAdmin
+    .from("family_members")
+    .select("id, family_id, role, email")
+    .eq("id", id)
+    .eq("family_id", sessionMember.family_id)
+    .single();
+
+  if (fetchErr || !target) return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  if (target.role === "owner") return NextResponse.json({ error: "Cannot delete the owner" }, { status: 403 });
+  if (target.id === sessionMember.id) return NextResponse.json({ error: "Cannot delete yourself" }, { status: 403 });
+
+  const { error } = await supabaseAdmin
+    .from("family_members")
+    .delete()
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
