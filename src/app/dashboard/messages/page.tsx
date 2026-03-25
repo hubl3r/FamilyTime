@@ -191,13 +191,19 @@ export default function MessagesPage() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [showSidebar, setShowSidebar]     = useState(true);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef       = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef   = useRef<HTMLDivElement>(null);
+  const inputRef         = useRef<HTMLTextAreaElement>(null);
+  const activeChannelRef = useRef<Channel | null>(null);
+  const currentContextRef = useRef<string>("");
 
   // Current member ID in this family
   const myMembership = me?.families.find(f => f.family_id === currentContext);
   const myMemberId   = myMembership?.member_id ?? "";
   const fp           = `family_id=${currentContext}`;
+
+  // Keep refs fresh so realtime callbacks always have latest values
+  useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+  useEffect(() => { currentContextRef.current = currentContext ?? ""; }, [currentContext]);
 
   // Load channels
   const loadChannels = useCallback(async () => {
@@ -253,15 +259,19 @@ export default function MessagesPage() {
         schema: "public",
         table: "messages",
         filter: `channel_id=eq.${activeChannelId}`,
-      }, async (payload) => {
-        // Reload the full message list — simplest and most reliable
-        const res = await fetch(`/api/messages/channels/${activeChannelId}?family_id=${currentContext}`);
+      }, async () => {
+        // Use refs so we always have fresh values inside the closure
+        const famId = currentContextRef.current;
+        const chId  = activeChannelRef.current?.id;
+        if (!chId || !famId) return;
+        // Reload the full message list
+        const res = await fetch(`/api/messages/channels/${chId}?family_id=${famId}`);
         if (res.ok) {
           const updated = await res.json();
           setMessages(updated);
         }
         // Mark as read
-        fetch(`/api/messages/channels/${activeChannelId}?family_id=${currentContext}`, { method: "PATCH" });
+        fetch(`/api/messages/channels/${chId}?family_id=${famId}`, { method: "PATCH" });
       })
       .subscribe();
 
