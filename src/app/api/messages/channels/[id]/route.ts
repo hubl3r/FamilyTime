@@ -1,25 +1,34 @@
 // src/app/api/messages/channels/[id]/route.ts
-// GET   — fetch and decrypt messages for a channel
-// PATCH — mark channel as read
-
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionMemberForFamily } from "@/lib/permissions";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptField } from "@/lib/crypto";
 
 type Params = { params: Promise<{ id: string }> };
 
+async function getCurrentUser(session: { user?: { email?: string | null } } | null) {
+  if (!session?.user?.email) return null;
+  const { data } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("email", session.user.email.toLowerCase().trim())
+    .maybeSingle();
+  return data;
+}
+
 export async function GET(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
-  const member = await getSessionMemberForFamily(req);
-  if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const user = await getCurrentUser(session);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Verify membership
+  // Verify membership by user_id
   const { data: membership } = await supabaseAdmin
     .from("channel_members")
     .select("id")
     .eq("channel_id", channelId)
-    .eq("member_id", member.id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (!membership) return NextResponse.json({ error: "Not a member of this channel" }, { status: 403 });
@@ -36,6 +45,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       )
     `)
     .eq("channel_id", channelId)
+    .eq("is_deleted", false)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -44,27 +54,24 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { data: messages, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Decrypt message bodies, return oldest first
   const decrypted = (messages ?? [])
     .reverse()
-    .map(m => ({
-      ...m,
-      body: m.is_deleted ? null : decryptField(m.body),
-    }));
+    .map(m => ({ ...m, body: decryptField(m.body) }));
 
   return NextResponse.json(decrypted);
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const { id: channelId } = await params;
-  const member = await getSessionMemberForFamily(req);
-  if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const user = await getCurrentUser(session);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await supabaseAdmin
     .from("channel_members")
     .update({ last_read_at: new Date().toISOString() })
     .eq("channel_id", channelId)
-    .eq("member_id", member.id);
+    .eq("user_id", user.id);
 
   return NextResponse.json({ success: true });
 }
