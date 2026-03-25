@@ -3,8 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/components/UserContext";
 import { useTheme } from "@/components/ThemeContext";
-import { createClient } from "@supabase/supabase-js";
-
 // ── Types ─────────────────────────────────────────────────────
 type Sender = { id: string; first_name: string; last_name: string; initials: string; color: string; email: string };
 type Message = { id: string; body: string | null; type: string; parent_id: string | null; is_edited: boolean; is_deleted: boolean; created_at: string; sender: Sender };
@@ -16,12 +14,6 @@ type Channel = {
   unread_count: number;
 };
 type FamilyMember = { id: string; first_name: string; last_name: string; initials: string; color: string; email: string };
-
-// ── Supabase client for realtime ──────────────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmtTime(ts: string) {
@@ -249,37 +241,46 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Supabase Realtime subscription — reload full list on any new message
+  // Poll for new messages — pauses when tab is hidden to save DB queries
   useEffect(() => {
     if (!activeChannel) return;
 
-    const activeChannelId = activeChannel.id;
+    let lastMessageId = "";
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const channel = supabase
-      .channel(`messages:${activeChannelId}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-        filter: `channel_id=eq.${activeChannelId}`,
-      }, async () => {
-        // Use refs so we always have fresh values inside the closure
-        const famId = currentContextRef.current;
-        const chId  = activeChannelRef.current?.id;
-        if (!chId || !famId) return;
-        // Reload the full message list
-        const res = await fetch(`/api/messages/channels/${chId}?family_id=${famId}`);
-        if (res.ok) {
-          const updated = await res.json();
-          setMessages(updated);
-        }
-        // Mark as read
-        fetch(`/api/messages/channels/${chId}?family_id=${famId}`, { method: "PATCH" });
-      })
-      .subscribe();
+    const poll = async () => {
+      // Skip if tab is not visible
+      if (document.hidden) return;
+      const famId = currentContextRef.current;
+      const chId  = activeChannelRef.current?.id;
+      if (!chId || !famId) return;
+      const res = await fetch(`/api/messages/channels/${chId}?family_id=${famId}`);
+      if (!res.ok) return;
+      const updated = await res.json();
+      if (updated.length === 0) return;
+      const latestId = updated[updated.length - 1]?.id;
+      // Only update state if there are actually new messages
+      if (latestId !== lastMessageId) {
+        lastMessageId = latestId;
+        setMessages(updated);
+      }
+    };
 
-    return () => { supabase.removeChannel(channel); };
-  }, [activeChannel?.id, currentContext]);
+    // Poll immediately, then every 5 seconds
+    poll();
+    intervalId = setInterval(poll, 5000);
+
+    // Pause/resume on tab visibility change
+    const onVisibility = () => {
+      if (!document.hidden) poll(); // immediately catch up when tab becomes active
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [activeChannel?.id]);
 
   // Send message
   const sendMessage = async () => {
@@ -314,7 +315,7 @@ export default function MessagesPage() {
   const clearChat = async () => {
     if (!activeChannel) return;
     await fetch(`/api/messages/channels?${fp}&channel_id=${activeChannel.id}&action=clear`, { method: "DELETE" });
-    setMessages([]);
+    setMessages([]); // Just empty — deleted messages are filtered server-side on next fetch
     setConfirmClear(false);
     setShowChannelMenu(false);
   };
