@@ -243,44 +243,39 @@ export default function MessagesPage() {
 
   // Poll for new messages — pauses when tab is hidden to save DB queries
   useEffect(() => {
-    if (!activeChannel) return;
+    if (!activeChannel || !currentContext) return;
 
+    const chId  = activeChannel.id;
+    const famId = currentContext;
     let lastMessageId = "";
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const poll = async () => {
-      // Skip if tab is not visible
       if (document.hidden) return;
-      const famId = currentContextRef.current;
-      const chId  = activeChannelRef.current?.id;
-      if (!chId || !famId) return;
-      const res = await fetch(`/api/messages/channels/${chId}?family_id=${famId}`);
-      if (!res.ok) return;
-      const updated = await res.json();
-      if (updated.length === 0) return;
-      const latestId = updated[updated.length - 1]?.id;
-      // Only update state if there are actually new messages
-      if (latestId !== lastMessageId) {
-        lastMessageId = latestId;
-        setMessages(updated);
-      }
+      try {
+        const res = await fetch(`/api/messages/channels/${chId}?family_id=${famId}`);
+        if (!res.ok) return;
+        const updated = await res.json();
+        const latestId = updated.length > 0 ? updated[updated.length - 1]?.id : "empty";
+        if (latestId !== lastMessageId) {
+          lastMessageId = latestId;
+          setMessages(updated);
+        }
+      } catch { /* silent */ }
     };
 
     // Poll immediately, then every 5 seconds
     poll();
     intervalId = setInterval(poll, 5000);
 
-    // Pause/resume on tab visibility change
-    const onVisibility = () => {
-      if (!document.hidden) poll(); // immediately catch up when tab becomes active
-    };
+    const onVisibility = () => { if (!document.hidden) poll(); };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       if (intervalId) clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [activeChannel?.id]);
+  }, [activeChannel?.id, currentContext]);
 
   // Send message
   const sendMessage = async () => {
