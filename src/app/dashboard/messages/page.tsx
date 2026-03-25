@@ -188,6 +188,9 @@ export default function MessagesPage() {
   const [loadingChannels, setLoadingChannels] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [showNewChannel, setShowNewChannel] = useState(false);
+  const [showChannelMenu, setShowChannelMenu] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDeleteChannel, setConfirmDeleteChannel] = useState(false);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [showSidebar, setShowSidebar]     = useState(true);
 
