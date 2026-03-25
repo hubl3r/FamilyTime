@@ -308,6 +308,24 @@ export default function MessagesPage() {
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_deleted: true, body: null } : m));
   };
 
+  const clearChat = async () => {
+    if (!activeChannel) return;
+    await fetch(`/api/messages/channels?${fp}&channel_id=${activeChannel.id}&action=clear`, { method: "DELETE" });
+    setMessages([]);
+    setConfirmClear(false);
+    setShowChannelMenu(false);
+  };
+
+  const deleteChannel = async () => {
+    if (!activeChannel) return;
+    await fetch(`/api/messages/channels?${fp}&channel_id=${activeChannel.id}&action=delete`, { method: "DELETE" });
+    setActiveChannel(null);
+    setMessages([]);
+    setConfirmDeleteChannel(false);
+    setShowChannelMenu(false);
+    await loadChannels();
+  };
+
   const selectChannel = (ch: Channel) => {
     setActiveChannel(ch);
     setMessages([]);
@@ -418,6 +436,47 @@ export default function MessagesPage() {
                 {getChannelName(activeChannel, familyMembers, myMemberId)}
               </div>
               {activeChannel.description && <div style={{ fontSize:11, color:"var(--ink-subtle)" }}>{activeChannel.description}</div>}
+            </div>
+            {/* Channel menu */}
+            <div style={{ marginLeft:"auto", position:"relative" }}>
+              <button
+                onClick={() => { setShowChannelMenu(v => !v); setConfirmClear(false); setConfirmDeleteChannel(false); }}
+                style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"var(--ink-subtle)", padding:"4px 8px", borderRadius:8 }}
+              >⋯</button>
+              {showChannelMenu && (
+                <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", background:"#fff", border:"1.5px solid var(--border)", borderRadius:14, padding:6, minWidth:180, boxShadow:"0 8px 24px rgba(100,60,60,0.12)", zIndex:300 }}>
+                  {!confirmClear && !confirmDeleteChannel && (
+                    <>
+                      <button onClick={() => setConfirmClear(true)} style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", textAlign:"left", fontSize:13, fontWeight:600, color:"var(--ink)", cursor:"pointer", borderRadius:10, fontFamily:"inherit" }}>
+                        🧹 Clear chat history
+                      </button>
+                      <button onClick={() => setConfirmDeleteChannel(true)} style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", textAlign:"left", fontSize:13, fontWeight:600, color:"#C97B7B", cursor:"pointer", borderRadius:10, fontFamily:"inherit" }}>
+                        🗑️ Delete channel
+                      </button>
+                    </>
+                  )}
+                  {confirmClear && (
+                    <div style={{ padding:"8px 10px" }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:"var(--ink)", marginBottom:8 }}>Clear all messages?</div>
+                      <div style={{ fontSize:11, color:"var(--ink-subtle)", marginBottom:10 }}>This cannot be undone.</div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => setConfirmClear(false)} style={{ flex:1, padding:"7px", background:"#fff", border:"1.5px solid var(--border)", borderRadius:8, fontSize:12, fontWeight:700, color:"var(--ink-subtle)", cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
+                        <button onClick={clearChat} style={{ flex:1, padding:"7px", background:"#E8A5A5", border:"none", borderRadius:8, fontSize:12, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>Clear</button>
+                      </div>
+                    </div>
+                  )}
+                  {confirmDeleteChannel && (
+                    <div style={{ padding:"8px 10px" }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#C97B7B", marginBottom:8 }}>Delete this channel?</div>
+                      <div style={{ fontSize:11, color:"var(--ink-subtle)", marginBottom:10 }}>All messages will be permanently removed.</div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => setConfirmDeleteChannel(false)} style={{ flex:1, padding:"7px", background:"#fff", border:"1.5px solid var(--border)", borderRadius:8, fontSize:12, fontWeight:700, color:"var(--ink-subtle)", cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
+                        <button onClick={deleteChannel} style={{ flex:1, padding:"7px", background:"#C97B7B", border:"none", borderRadius:8, fontSize:12, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit" }}>Delete</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

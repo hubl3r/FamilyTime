@@ -144,3 +144,50 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ channel_id: channel.id, exists: false }, { status: 201 });
 }
+
+// DELETE /api/messages/channels?channel_id=xxx&action=clear|delete
+export async function DELETE(req: NextRequest) {
+  const member = await getSessionMemberForFamily(req);
+  if (!member) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const channelId = req.nextUrl.searchParams.get("channel_id");
+  const action    = req.nextUrl.searchParams.get("action") ?? "clear"; // clear=soft delete messages, delete=remove channel
+
+  if (!channelId) return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+
+  // Verify membership
+  const { data: cm } = await supabaseAdmin
+    .from("channel_members")
+    .select("id")
+    .eq("channel_id", channelId)
+    .eq("member_id", member.id)
+    .maybeSingle();
+
+  if (!cm) return NextResponse.json({ error: "Not a member of this channel" }, { status: 403 });
+
+  // Only owner/admin can delete or clear
+  if (member.role !== "owner" && member.role !== "admin") {
+    return NextResponse.json({ error: "Only owners and admins can clear or delete channels" }, { status: 403 });
+  }
+
+  if (action === "clear") {
+    // Soft-delete all messages in the channel
+    await supabaseAdmin
+      .from("messages")
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+      .eq("channel_id", channelId);
+
+    return NextResponse.json({ success: true, action: "cleared" });
+  }
+
+  if (action === "delete") {
+    // Hard delete messages, channel_members, then channel
+    await supabaseAdmin.from("messages").delete().eq("channel_id", channelId);
+    await supabaseAdmin.from("channel_members").delete().eq("channel_id", channelId);
+    await supabaseAdmin.from("channels").delete().eq("id", channelId);
+
+    return NextResponse.json({ success: true, action: "deleted" });
+  }
+
+  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+}
