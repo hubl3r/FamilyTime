@@ -2,17 +2,39 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useUser } from "./UserContext";
 
 const tabs = [
-  { href:"/dashboard",            icon:"🏠", label:"Home"      },
-  { href:"/dashboard/finances",   icon:"💰", label:"Finances"  },
-  { href:"/dashboard/documents",  icon:"📁", label:"Files"     },
-  { href:"/dashboard/chores",     icon:"🧹", label:"Chores"    },
-  { href:"/dashboard/settings",   icon:"⚙️",  label:"Settings"  },
+  { href:"/dashboard",           icon:"🏠", label:"Home"     },
+  { href:"/dashboard/finances",  icon:"💰", label:"Finances" },
+  { href:"/dashboard/messages",  icon:"💬", label:"Messages" },
+  { href:"/dashboard/members",   icon:"👨‍👩‍👧‍👦", label:"Members"  },
+  { href:"/dashboard/settings",  icon:"⚙️",  label:"Settings" },
 ];
 
 export default function BottomNav() {
   const path = usePathname();
+  const { currentContext } = useUser();
+  const [unread, setUnread] = useState(0);
+
+  // Poll for unread count every 30 seconds
+  useEffect(() => {
+    if (!currentContext || currentContext === "personal") { setUnread(0); return; }
+    const check = async () => {
+      try {
+        const res = await fetch(`/api/messages/channels?family_id=${currentContext}`);
+        if (res.ok) {
+          const channels = await res.json();
+          const total = channels.reduce((sum: number, c: { unread_count: number }) => sum + (c.unread_count || 0), 0);
+          setUnread(total);
+        }
+      } catch { /* silent */ }
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [currentContext]);
 
   return (
     <nav style={{
@@ -30,6 +52,7 @@ export default function BottomNav() {
     }}>
       {tabs.map(tab => {
         const active = path === tab.href || (tab.href !== "/dashboard" && path.startsWith(tab.href));
+        const isMessages = tab.href === "/dashboard/messages";
         return (
           <Link key={tab.href} href={tab.href} style={{ textDecoration:"none", display:"flex", flexDirection:"column", alignItems:"center", gap:4, flex:1, padding:"8px 4px", position:"relative" }}>
             {active && (
@@ -41,8 +64,20 @@ export default function BottomNav() {
               display:"flex", alignItems:"center", justifyContent:"center",
               fontSize:20, transition:"all 0.2s",
               transform: active ? "translateY(-2px)" : "none",
+              position:"relative",
             }}>
               {tab.icon}
+              {isMessages && unread > 0 && !active && (
+                <div style={{
+                  position:"absolute", top:0, right:2,
+                  width:16, height:16, borderRadius:"50%",
+                  background:"#E8A5A5", color:"#fff",
+                  fontSize:9, fontWeight:800,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                }}>
+                  {unread > 9 ? "9+" : unread}
+                </div>
+              )}
             </div>
             <span style={{ fontSize:10, fontWeight: active ? 800 : 500, color: active ? "#8B7070" : "#B8A8A8", fontFamily:"'Nunito',sans-serif" }}>
               {tab.label}
