@@ -240,39 +240,33 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Supabase Realtime subscription
+  // Supabase Realtime subscription — reload full list on any new message
   useEffect(() => {
     if (!activeChannel) return;
 
+    const activeChannelId = activeChannel.id;
+
     const channel = supabase
-      .channel(`messages:${activeChannel.id}`)
+      .channel(`messages:${activeChannelId}`)
       .on("postgres_changes", {
         event: "INSERT",
         schema: "public",
         table: "messages",
-        filter: `channel_id=eq.${activeChannel.id}`,
+        filter: `channel_id=eq.${activeChannelId}`,
       }, async (payload) => {
-        // Fetch the full message with sender info + decrypted body via our API
-        const res = await fetch(`/api/messages/channels/${activeChannel.id}?${fp}&limit=1`);
+        // Reload the full message list — simplest and most reliable
+        const res = await fetch(`/api/messages/channels/${activeChannelId}?family_id=${currentContext}`);
         if (res.ok) {
-          const latest = await res.json();
-          if (latest.length > 0) {
-            const newMsg = latest[latest.length - 1];
-            setMessages(prev => {
-              if (prev.find(m => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          }
+          const updated = await res.json();
+          setMessages(updated);
         }
-        // Mark as read if it's not from us
-        if (payload.new.sender_id !== myMemberId) {
-          fetch(`/api/messages/channels/${activeChannel.id}?${fp}`, { method: "PATCH" });
-        }
+        // Mark as read
+        fetch(`/api/messages/channels/${activeChannelId}?family_id=${currentContext}`, { method: "PATCH" });
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [activeChannel?.id, myMemberId]);
+  }, [activeChannel?.id, currentContext]);
 
   // Send message
   const sendMessage = async () => {
