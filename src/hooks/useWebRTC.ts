@@ -54,6 +54,9 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
   const localStreamRef  = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const globalPollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchedChannels = useRef<Set<string>>(new Set());
+  const globalLastTime  = useRef<string>(new Date(Date.now() - 10000).toISOString());
   const lastSignalTime  = useRef<string>(new Date().toISOString());
   const channelIdRef    = useRef<string | null>(null);
   const sessionIdRef    = useRef<string | null>(null);
@@ -249,10 +252,46 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
   // ── Subscribe to channel (called from outside) ────────────────
   const subscribeToChannel = useCallback((chanId: string) => {
-    // Reset to 10 seconds ago to catch recent call-invites
-    lastSignalTime.current = new Date(Date.now() - 10000).toISOString();
-    startPolling(chanId);
-  }, [startPolling]);
+    watchedChannels.current.add(chanId);
+
+    // If already in a call, use the fast per-channel poll
+    if (callStateRef.current !== "idle") {
+      lastSignalTime.current = new Date(Date.now() - 10000).toISOString();
+      startPolling(chanId);
+      return;
+    }
+
+    // Already polling globally
+    if (globalPollRef.current) return;
+
+    const globalPoll = async () => {
+      if (document.hidden) return;
+      for (const id of watchedChannels.current) {
+        try {
+          const res = await fetch(`/api/calls/signal?channel_id=${id}&after=${encodeURIComponent(globalLastTime.current)}`);
+          if (!res.ok) continue;
+          const signals = await res.json();
+          if (signals.length > 0) {
+            globalLastTime.current = signals[signals.length - 1].created_at;
+            for (const signal of signals) {
+              await handleSignal({ ...signal, channel_id: id });
+            }
+          }
+        } catch { /* silent */ }
+      }
+    };
+
+    globalPoll();
+    globalPollRef.current = setInterval(globalPoll, 2000);
+  }, [startPolling, handleSignal]);
+
+  // Stop global poll when in a call
+  useEffect(() => {
+    if (callState !== "idle" && globalPollRef.current) {
+      clearInterval(globalPollRef.current);
+      globalPollRef.current = null;
+    }
+  }, [callState]);
 
   // ── Get local media ───────────────────────────────────────────
   const getLocalStream = useCallback(async (type: "video" | "audio") => {
