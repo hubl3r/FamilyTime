@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/ThemeContext";
 import StyleSidebar from "@/components/StyleSidebar";
 import { getSessionMember } from "@/lib/permissions";
 import { UserProvider } from "@/components/UserContext";
+import { CallProvider } from "@/components/CallContext";
 import ContextSwitcher from "@/components/ContextSwitcher";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <ThemeProvider>
       <UserProvider>
+        <CallProvider>
         <div style={{ minHeight:"100vh", background:"var(--cream)", paddingBottom:"var(--nav-height)" }}>
           <header style={{
             position:"sticky", top:0, zIndex:50,
@@ -63,6 +65,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <BottomNav />
           <StyleSidebar />
         </div>
+        </CallProvider>
       </UserProvider>
     </ThemeProvider>
   );

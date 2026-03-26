@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser } from "@/components/UserContext";
+import { useCall } from "@/components/CallContext";
 import { useTheme } from "@/components/ThemeContext";
 
 type Sender = { id: string; first_name: string; last_name: string; initials: string; color: string; email: string };
@@ -189,6 +190,8 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
 
+  const { startCall, callState } = useCall();
+
   const sharedFamilies = (me?.families ?? []).filter(
     f => !(f.family as unknown as { is_personal?: boolean })?.is_personal
   );
@@ -358,6 +361,21 @@ export default function MessagesPage() {
             <div style={{ flex:1 }}>
               <div style={{ fontSize:15, fontWeight:800, color:"var(--ink)" }}>{getChannelDisplayName(activeChannel)}</div>
               {activeChannel.type !== "direct" && <div style={{ fontSize:11, color:"var(--ink-subtle)" }}>{activeChannel.member_count} people</div>}
+            </div>
+            {/* Call buttons */}
+            <div style={{ display:"flex", gap:6, marginLeft:"auto" }}>
+              <button
+                onClick={() => startCall(activeChannel.id, "audio")}
+                disabled={callState !== "idle"}
+                title="Voice call"
+                style={{ width:36, height:36, borderRadius:10, background:"rgba(168,197,160,0.2)", border:"1.5px solid #A8C5A040", cursor: callState !== "idle" ? "not-allowed" : "pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", opacity: callState !== "idle" ? 0.5 : 1 }}
+              >📞</button>
+              <button
+                onClick={() => startCall(activeChannel.id, "video")}
+                disabled={callState !== "idle"}
+                title="Video call"
+                style={{ width:36, height:36, borderRadius:10, background:"rgba(168,197,160,0.2)", border:"1.5px solid #A8C5A040", cursor: callState !== "idle" ? "not-allowed" : "pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", opacity: callState !== "idle" ? 0.5 : 1 }}
+              >📹</button>
             </div>
             <div style={{ position:"relative" }}>
               <button onClick={() => { setShowChannelMenu(v => !v); setConfirmClear(false); setConfirmDelete(false); }} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"var(--ink-subtle)", padding:"4px 8px", borderRadius:8 }}>⋯</button>
