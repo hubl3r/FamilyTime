@@ -249,6 +249,8 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
   // ── Subscribe to channel (called from outside) ────────────────
   const subscribeToChannel = useCallback((chanId: string) => {
+    // Reset to 10 seconds ago to catch recent call-invites
+    lastSignalTime.current = new Date(Date.now() - 10000).toISOString();
     startPolling(chanId);
   }, [startPolling]);
 
@@ -396,7 +398,10 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
   }, [isScreenSharing, callType, getLocalStream]);
 
   // Cleanup on unmount
-  useEffect(() => () => { stopPolling(); }, [stopPolling]);
+  useEffect(() => () => {
+    stopPolling();
+    if (globalPollRef.current) clearInterval(globalPollRef.current);
+  }, [stopPolling]);
 
   return {
     callState, sessionId, channelId, localStream, remotePeers,

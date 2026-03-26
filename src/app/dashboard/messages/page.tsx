@@ -211,6 +211,12 @@ export default function MessagesPage() {
 
   useEffect(() => { loadChannels(); loadContacts(); }, [loadChannels, loadContacts]);
 
+  // Subscribe to all channels for incoming call detection
+  useEffect(() => {
+    if (!channels.length) return;
+    channels.forEach(ch => subscribeToChannel(ch.id));
+  }, [channels.length, subscribeToChannel]);
+
   // Poll for new messages
   useEffect(() => {
     if (!activeChannel) return;
