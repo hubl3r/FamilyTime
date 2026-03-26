@@ -1,18 +1,11 @@
 // src/app/api/calls/signal/route.ts
-// POST — send a WebRTC signal (offer, answer, ice-candidate, call-invite, call-end)
-// Uses Supabase Realtime broadcast to relay signals between peers
+// POST — store a WebRTC signal in DB for polling
+// GET  — fetch pending signals for current user
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createClient } from "@supabase/supabase-js";
-
-// Server-side Supabase client for broadcast
-const supabaseBroadcast = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 async function getCurrentUser(session: { user?: { email?: string | null } } | null) {
   if (!session?.user?.email) return null;
@@ -24,22 +17,44 @@ async function getCurrentUser(session: { user?: { email?: string | null } } | nu
   return data;
 }
 
+// GET /api/calls/signal?channel_id=xxx&after=<timestamp>
+// Returns signals meant for current user since timestamp
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  const user = await getCurrentUser(session);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const channelId = req.nextUrl.searchParams.get("channel_id");
+  const after     = req.nextUrl.searchParams.get("after") ?? new Date(Date.now() - 30000).toISOString();
+
+  if (!channelId) return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+
+  const { data, error } = await supabaseAdmin
+    .from("webrtc_signals")
+    .select("*")
+    .eq("channel_id", channelId)
+    .neq("from_user_id", user.id) // don't return own signals
+    .or(`to_user_id.is.null,to_user_id.eq.${user.id}`) // broadcast or targeted
+    .gt("created_at", after)
+    .order("created_at", { ascending: true });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
 // POST /api/calls/signal
-// Body: { session_id, channel_id, type, payload, to_user_id? }
-// type: "call-invite" | "call-accepted" | "call-declined" | "call-ended"
-//       "offer" | "answer" | "ice-candidate" | "peer-joined" | "peer-left"
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const user = await getCurrentUser(session);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { session_id, channel_id, type, payload, to_user_id } = body;
+  const { channel_id, session_id, type, payload, to_user_id } = body;
 
-  if (!type) return NextResponse.json({ error: "type required" }, { status: 400 });
+  if (!type || !channel_id) return NextResponse.json({ error: "type and channel_id required" }, { status: 400 });
 
-  // Get sender info for display
-  const { data: senderMember } = await supabaseAdmin
+  // Get sender info
+  const { data: member } = await supabaseAdmin
     .from("family_members")
     .select("first_name, last_name, initials, color")
     .eq("nextauth_user_id", user.id)
@@ -47,30 +62,35 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const signal = {
-    type,
-    from_user_id: user.id,
-    from_name:    senderMember ? `${senderMember.first_name} ${senderMember.last_name}` : "Someone",
-    from_initials: senderMember?.initials ?? "?",
-    from_color:   senderMember?.color ?? "#E8A5A5",
-    to_user_id:   to_user_id ?? null,
-    session_id:   session_id ?? null,
-    channel_id:   channel_id ?? null,
-    payload:      payload ?? null,
-    timestamp:    new Date().toISOString(),
-  };
-
-  // Broadcast on the channel's signaling room
-  const roomId = channel_id ?? session_id;
-  if (!roomId) return NextResponse.json({ error: "channel_id or session_id required" }, { status: 400 });
-
-  await supabaseBroadcast
-    .channel(`calls:${roomId}`)
-    .send({
-      type:    "broadcast",
-      event:   "signal",
-      payload: signal,
+  const { error } = await supabaseAdmin
+    .from("webrtc_signals")
+    .insert({
+      channel_id,
+      session_id:    session_id ?? null,
+      from_user_id:  user.id,
+      to_user_id:    to_user_id ?? null,
+      type,
+      payload:       payload ?? null,
+      from_name:     member ? `${member.first_name} ${member.last_name}` : "Someone",
+      from_initials: member?.initials ?? "?",
+      from_color:    member?.color ?? "#E8A5A5",
     });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+// DELETE /api/calls/signal?channel_id=xxx — cleanup old signals
+export async function DELETE(req: NextRequest) {
+  const channelId = req.nextUrl.searchParams.get("channel_id");
+  if (!channelId) return NextResponse.json({ error: "channel_id required" }, { status: 400 });
+
+  // Delete signals older than 60 seconds
+  await supabaseAdmin
+    .from("webrtc_signals")
+    .delete()
+    .eq("channel_id", channelId)
+    .lt("created_at", new Date(Date.now() - 60000).toISOString());
 
   return NextResponse.json({ success: true });
 }

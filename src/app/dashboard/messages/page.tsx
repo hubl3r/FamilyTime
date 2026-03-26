@@ -285,6 +285,8 @@ export default function MessagesPage() {
 
   const selectChannel = (ch: Channel) => {
     setActiveChannel(ch); setMessages([]);
+    // Start polling for call signals on this channel
+    subscribeToChannel(ch.id);
     if (window.innerWidth < 640) setShowSidebar(false);
   };
 

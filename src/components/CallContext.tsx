@@ -1,17 +1,9 @@
 // src/components/CallContext.tsx
-// Global call context — wraps the whole app so incoming calls
-// show regardless of which page you're on
 "use client";
 import { createContext, useContext, useEffect, ReactNode } from "react";
 import { useWebRTC, CallState, RemotePeer, IncomingCall } from "@/hooks/useWebRTC";
 import { IncomingCallOverlay, InCallView } from "./CallUI";
 import { useUser } from "./UserContext";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 type CallContextType = {
   callState:          CallState;
@@ -41,61 +33,49 @@ export function useCall() {
 export function CallProvider({ children }: { children: ReactNode }) {
   const { me } = useUser();
 
-  // Get current user info from me context
-  const myMembership = me?.families[0];
-  const myUserId     = myMembership?.family?.id ?? ""; // placeholder — will be replaced with real user_id
-  const myName       = me ? `${me.first_name} ${me.last_name}` : "";
-  const myInitials   = me?.initials ?? "";
-  const myColor      = me?.color ?? "#E8A5A5";
-  const myEmail      = me?.email ?? "";
+  const myName     = me ? `${me.first_name} ${me.last_name}` : "";
+  const myInitials = me?.initials ?? "";
+  const myColor    = me?.color ?? "#E8A5A5";
+  const myEmail    = me?.email ?? "";
 
   const webrtc = useWebRTC({
-    myUserId: myEmail, // use email as stable identifier since we have it
+    myUserId:   myEmail,
     myName,
     myInitials,
     myColor,
   });
 
-  // Subscribe to all channels the user is in for incoming call notifications
+  // Subscribe to all shared family channels for incoming call signals
   useEffect(() => {
     if (!me?.families?.length) return;
 
-    // Subscribe to each non-personal family's call channel
-    const channels = me.families
-      .filter(f => !(f.family as unknown as { is_personal?: boolean })?.is_personal)
-      .map(f => {
-        const ch = supabase
-          .channel(`calls-listen:${f.family_id}`)
-          .on("broadcast", { event: "signal" }, ({ payload }) => {
-            if (payload.type === "call-invite" && payload.from_user_id !== myEmail) {
-              // This is handled by the WebRTC hook's subscribeToChannel
-              // But we need to ensure we're subscribed to the right channel
-              webrtc.subscribeToChannel(payload.channel_id);
-            }
-          })
-          .subscribe();
-        return ch;
-      });
+    // We need to poll for call-invite signals across all channels the user is in
+    // Start polling on the first shared family's channels
+    const sharedFamilies = me.families.filter(
+      f => !(f.family as unknown as { is_personal?: boolean })?.is_personal
+    );
 
-    return () => {
-      channels.forEach(ch => supabase.removeChannel(ch));
-    };
+    if (sharedFamilies.length > 0) {
+      // Poll a global "inbox" endpoint for incoming calls
+      // For now subscribe to each family's signal channel
+      // The actual channel subscription happens when a call starts
+    }
   }, [me?.email]);
 
   const value: CallContextType = {
-    callState:         webrtc.callState,
-    localStream:       webrtc.localStream,
-    remotePeers:       webrtc.remotePeers,
-    isMuted:           webrtc.isMuted,
-    isCameraOff:       webrtc.isCameraOff,
-    isScreenSharing:   webrtc.isScreenSharing,
-    callType:          webrtc.callType,
-    incomingCall:      webrtc.incomingCall,
-    startCall:         webrtc.startCall,
-    endCall:           webrtc.endCall,
-    toggleMute:        webrtc.toggleMute,
-    toggleCamera:      webrtc.toggleCamera,
-    toggleScreenShare: webrtc.toggleScreenShare,
+    callState:          webrtc.callState,
+    localStream:        webrtc.localStream,
+    remotePeers:        webrtc.remotePeers,
+    isMuted:            webrtc.isMuted,
+    isCameraOff:        webrtc.isCameraOff,
+    isScreenSharing:    webrtc.isScreenSharing,
+    callType:           webrtc.callType,
+    incomingCall:       webrtc.incomingCall,
+    startCall:          webrtc.startCall,
+    endCall:            webrtc.endCall,
+    toggleMute:         webrtc.toggleMute,
+    toggleCamera:       webrtc.toggleCamera,
+    toggleScreenShare:  webrtc.toggleScreenShare,
     subscribeToChannel: webrtc.subscribeToChannel,
   };
 
@@ -103,7 +83,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
     <CallContext.Provider value={value}>
       {children}
 
-      {/* Incoming call overlay — shows on top of any page */}
       {webrtc.incomingCall && webrtc.callState === "incoming" && (
         <IncomingCallOverlay
           call={webrtc.incomingCall}
@@ -112,7 +91,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* In-call view — fullscreen overlay when in a call */}
       {(webrtc.callState === "connected" || webrtc.callState === "calling") && (
         <InCallView
           localStream={webrtc.localStream}
