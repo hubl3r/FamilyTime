@@ -190,7 +190,7 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef       = useRef<HTMLTextAreaElement>(null);
 
-  const { startCall, callState } = useCall();
+  const { startCall, callState, subscribeToChannel } = useCall();
 
   const sharedFamilies = (me?.families ?? []).filter(
     f => !(f.family as unknown as { is_personal?: boolean })?.is_personal
