@@ -815,10 +815,351 @@ export default function MembersPage() {
 
   const loadJoinRequests = useCallback(async () => {
     try {
-      const familyId = currentContext && currentContext !== "personal" ? `?family_id=${currentContext}` : "";
-      const res = await fetch(`/api/members/join-requests${familyId}`);
+      const qs = currentContext && currentContext !== "personal" ? `?family_id=${currentContext}` : "";
+      const res = await fetch(`/api/members/join-requests${qs}`);
       if (res.ok) setJoinRequests(await res.json());
     } catch { /* not privileged */ }
-    }, [currentContext]);
+  }, [currentContext]);
 
   useEffect(() => { loadMembers(); loadJoinRequests(); }, [loadMembers, loadJoinRequests]);
+
+  const handleSave = async (data: Record<string, string>) => {
+    setSaving(true);
+    try {
+      const isEdit = !!editingMember;
+      const res = await fetch(isEdit ? `/api/members/${editingMember!.id}` : "/api/members", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Save failed");
+      }
+      setEditingMember(undefined);
+      setSelectedMember(null);
+      await loadMembers();
+      showToast(isEdit ? `${data.first_name} updated!` : `Invite sent to ${data.email}!`);
+    } catch (e) {
+      showToast((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async (member: FamilyMember) => {
+    try {
+      await fetch(`/api/members/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: !member.is_active }),
+      });
+      setSelectedMember(null);
+      await loadMembers();
+      showToast(member.is_active ? `${member.first_name} deactivated` : `${member.first_name} reactivated`);
+    } catch {
+      showToast("Something went wrong");
+    }
+  };
+
+  const handleResendInvite = async (member: FamilyMember) => {
+    try {
+      await fetch(`/api/members/${member.id}/resend-invite`, { method: "POST" });
+      showToast(`Invite resent to ${member.email}`);
+    } catch {
+      showToast("Failed to resend invite");
+    }
+  };
+
+  const handleRoleChange = async (memberId: string, role: MemberRole) => {
+    try {
+      await fetch(`/api/members/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      await loadMembers();
+      showToast("Role updated");
+    } catch { showToast("Failed to update role"); }
+  };
+
+  const handleDelete = async (memberId: string) => {
+    try {
+      const res = await fetch(`/api/members/${memberId}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); showToast(d.error ?? "Failed to remove member"); return; }
+      setSelectedMember(null);
+      await loadMembers();
+      showToast("Member permanently removed");
+    } catch { showToast("Failed to remove member"); }
+  };
+
+  const handleJoinRequestAction = async (requestId: string, action: "approve" | "deny", role = "member") => {
+    try {
+      const res = await fetch("/api/members/join-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: requestId, action, role }),
+      });
+      if (!res.ok) { const err = await res.json(); showToast(err.error ?? "Action failed"); return; }
+      await Promise.all([loadJoinRequests(), loadMembers()]);
+      showToast(action === "approve" ? "Member approved & invite sent!" : "Request declined");
+    } catch { showToast("Something went wrong"); }
+  };
+
+  const handleRegenCode = async () => {
+    try {
+      const res = await fetch("/api/family", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ regenerate_code: true }) });
+      if (res.ok) setFamily(await res.json());
+      showToast("Invite code regenerated");
+    } catch { showToast("Failed to regenerate code"); }
+  };
+
+  const handleToggleSearchable = async () => {
+    if (!family) return;
+    try {
+      const res = await fetch("/api/family", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_searchable: !family.is_searchable }) });
+      if (res.ok) setFamily(await res.json());
+    } catch { showToast("Failed to update setting"); }
+  };
+
+  // Determine if current user is privileged (owner/admin)
+  // Determine current user's role from the matched session member
+  const currentUserRole: MemberRole = currentUser?.role ?? "member";
+  const isPrivileged = currentUserRole === "owner" || currentUserRole === "admin";
+
+  const activeCount = members.filter(m => m.is_active).length;
+  const pendingCount = members.filter(m => m.invite_status === "pending").length;
+
+  const filteredMembers = members.filter(m => {
+    if (filter === "active") return m.is_active;
+    if (filter === "pending") return m.invite_status === "pending";
+    return true;
+  });
+
+  return (
+    <div style={{ padding: "0 0 80px" }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 80, left: "50%", transform: "translateX(-50%)", zIndex: 1000, background: "#3D2C2C", color: "#fff", padding: "10px 20px", borderRadius: 12, fontSize: 13, fontWeight: 700, boxShadow: "0 4px 20px rgba(61,44,44,0.3)", whiteSpace: "nowrap" }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 12px" }}>
+        <div>
+          <h1 style={{ fontFamily: "'Fraunces',serif", fontSize: 24, fontWeight: 500, color: "#3D2C2C", marginBottom: 2 }}>Members</h1>
+          <div style={{ fontSize: 12, color: "#B8A8A8" }}>
+            {activeCount} active{pendingCount > 0 ? ` · ${pendingCount} pending` : ""}{joinRequests.length > 0 ? ` · ${joinRequests.length} requests` : ""}
+          </div>
+        </div>
+        <button
+          onClick={() => setEditingMember(null)}
+          style={{ width: 38, height: 38, borderRadius: 12, background: accent + "20", border: `1.5px solid ${accent}40`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: accent }}
+        >
+          +
+        </button>
+      </div>
+
+      {/* Main tabs */}
+      <div style={{ display: "flex", background: "rgba(255,255,255,0.6)", borderRadius: 14, padding: 4, marginBottom: 16, border: "1px solid #EDE0D8" }}>
+        {([
+          { id: "members", label: "👨‍👩‍👧‍👦 Members" },
+          { id: "requests", label: `🙋 Requests${joinRequests.length > 0 ? ` (${joinRequests.length})` : ""}` },
+        ] as const).map(tab => (
+          <button key={tab.id} onClick={() => setMainTab(tab.id)} style={{
+            flex: 1, padding: "8px 4px", borderRadius: 10, border: "none",
+            background: mainTab === tab.id ? "#fff" : "transparent",
+            fontSize: 13, fontWeight: 700,
+            color: mainTab === tab.id ? "#3D2C2C" : "#B8A8A8",
+            cursor: "pointer", fontFamily: "inherit",
+            boxShadow: mainTab === tab.id ? "0 2px 8px rgba(61,44,44,0.08)" : "none",
+          }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Requests Tab */}
+      {mainTab === "requests" && (
+        <div>
+          {joinRequests.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 0", color: "#B8A8A8" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🙋</div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>No pending join requests</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Share your invite code so people can request to join</div>
+            </div>
+          ) : joinRequests.map(req => (
+            <JoinRequestCard key={req.id} request={req} accent={accent} onAction={handleJoinRequestAction}/>
+          ))}
+          {family && (
+            <InviteCodePanel
+              family={family} isPrivileged={isPrivileged} accent={accent}
+              onRegenerate={handleRegenCode} onToggleSearchable={handleToggleSearchable}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Members Tab */}
+      {mainTab === "members" && (
+      <div>
+      {/* Avatar stack summary */}
+      {members.filter(m => m.is_active).length > 0 && (
+        <div style={{ background: "linear-gradient(135deg, rgba(232,165,165,0.15), rgba(181,168,212,0.15))", border: "1.5px solid #EDE0D8", borderRadius: 18, padding: "16px 18px", marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 10 }}>
+            {members.filter(m => m.is_active).slice(0, 6).map((m, i) => (
+              <div key={m.id} style={{ marginLeft: i === 0 ? 0 : -10, zIndex: 10 - i }}>
+                <Avatar member={m} size={40}/>
+              </div>
+            ))}
+            {members.filter(m => m.is_active).length > 6 && (
+              <div style={{ marginLeft: -10, width: 40, height: 40, borderRadius: 12, background: "#EDE0D8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#8B7070" }}>
+                +{members.filter(m => m.is_active).length - 6}
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            {(Object.entries(ROLE_CONFIG) as [MemberRole, typeof ROLE_CONFIG[MemberRole]][]).map(([role, cfg]) => {
+              const count = members.filter(m => m.role === role && m.is_active).length;
+              if (!count) return null;
+              return (
+                <div key={role} style={{ fontSize: 12, color: "#8B7070" }}>
+                  <span style={{ fontWeight: 700 }}>{count}</span> {cfg.label}{count !== 1 ? "s" : ""}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filter pills */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {([
+          { id: "active", label: `Active (${activeCount})` },
+          { id: "pending", label: `Pending (${pendingCount})` },
+          { id: "all", label: `All (${members.length})` },
+        ] as const).map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)} style={{
+            padding: "7px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+            border: `1.5px solid ${filter === f.id ? accent : "#EDE0D8"}`,
+            background: filter === f.id ? accent + "20" : "#fff",
+            color: filter === f.id ? accent : "#8B7070",
+            cursor: "pointer",
+          }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Members list */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 60, color: "#B8A8A8" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>👨‍👩‍👧‍👦</div>
+          <div style={{ fontSize: 14 }}>Loading members...</div>
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: "center", padding: 40, color: "#C97B7B" }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{error}</div>
+          <button onClick={loadMembers} style={{ marginTop: 12, padding: "8px 16px", background: accent, color: "#fff", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Retry</button>
+        </div>
+      ) : filteredMembers.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 60, color: "#B8A8A8" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>👨‍👩‍👧‍👦</div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>
+            {filter === "pending" ? "No pending invites" : "No members yet"}
+          </div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>
+            {filter !== "pending" && "Tap + to invite your first family member"}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filteredMembers.map(member => {
+            const roleCfg = ROLE_CONFIG[member.role];
+            const age = calcAge(member.birthday);
+            return (
+              <div
+                key={member.id}
+                onClick={() => setSelectedMember(member)}
+                style={{
+                  background: "rgba(255,255,255,0.85)", border: "1.5px solid #EDE0D8",
+                  borderRadius: 16, padding: "14px 16px", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 14,
+                  opacity: member.is_active ? 1 : 0.6,
+                  transition: "transform 0.1s",
+                }}
+              >
+                <Avatar member={member} size={48}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: "#3D2C2C" }}>
+                      {member.first_name} {member.last_name}
+                    </div>
+                    {member.nickname && <span style={{ fontSize: 12, color: "#B8A8A8" }}>"{member.nickname}"</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <RoleBadge role={member.role}/>
+                    <InviteBadge status={member.invite_status}/>
+                    {!member.is_active && (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 20, background: "#EDE0D8", color: "#8B7070" }}>Inactive</span>
+                    )}
+                  </div>
+                  {(age || member.email) && (
+                    <div style={{ fontSize: 11, color: "#B8A8A8", marginTop: 4 }}>
+                      {[age, member.email].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 16, color: "#D4C4B4" }}>›</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Permissions info card */}
+      <div style={{ background: "rgba(181,168,212,0.1)", border: "1.5px solid #B5A8D440", borderRadius: 16, padding: "14px 16px", marginTop: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#3D2C2C", marginBottom: 8 }}>🔗 How accounts link</div>
+        <div style={{ fontSize: 12, color: "#8B7070", lineHeight: 1.6 }}>
+          When you invite a member, they'll receive an email to create or link their own FamilyTime account. Once linked, their profile is connected across all devices. Owners and admins can manage access permissions for each module.
+        </div>
+      </div>
+
+      {family && (
+        <InviteCodePanel
+          family={family} isPrivileged={isPrivileged} accent={accent}
+          onRegenerate={handleRegenCode} onToggleSearchable={handleToggleSearchable}
+        />
+      )}
+      </div>)} {/* end Members tab */}
+
+      {/* Modals */}
+      {/* Detail drawer: show when a member is selected AND we're not in edit mode */}
+      {selectedMember && editingMember === undefined && (
+        <MemberDetailDrawer
+          member={selectedMember}
+          onClose={() => setSelectedMember(null)}
+          onEdit={() => setEditingMember(selectedMember)}
+          onDeactivate={() => handleDeactivate(selectedMember)}
+          onResendInvite={() => handleResendInvite(selectedMember)}
+          onRoleChange={handleRoleChange}
+          onDelete={handleDelete}
+          accent={accent}
+          currentUser={currentUser}
+        />
+      )}
+      {/* Form modal: show when editing (null = new member, FamilyMember = editing existing) */}
+      {editingMember !== undefined && (
+        <MemberFormModal
+          member={editingMember}
+          onClose={() => { setEditingMember(undefined); }}
+          onSave={handleSave}
+          saving={saving}
+          accent={accent}
+        />
+      )}
+    </div>
+  );
+}
