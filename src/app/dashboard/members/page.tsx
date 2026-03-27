@@ -895,7 +895,8 @@ export default function MembersPage() {
 
   const handleJoinRequestAction = async (requestId: string, action: "approve" | "deny", role = "member") => {
     try {
-      const res = await fetch("/api/members/join-requests", {
+      const qs = currentContext && currentContext !== "personal" ? `?family_id=${currentContext}` : "";
+      const res = await fetch(`/api/members/join-requests${qs}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ request_id: requestId, action, role }),

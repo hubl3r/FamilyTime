@@ -1,6 +1,6 @@
 // src/app/api/members/join-requests/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionMember } from "@/lib/permissions";
+import { getSessionMember, getSessionMemberForFamily } from "@/lib/permissions";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendJoinDeniedEmail } from "@/lib/email";
 import { Resend } from "resend";
@@ -11,7 +11,7 @@ const APP_URL = process.env.NEXTAUTH_URL ?? "https://hubler.vercel.app";
 
 // GET — list pending join requests for this family
 export async function GET(req: NextRequest) {
-  const sessionMember = await getSessionMember();
+  const sessionMember = await getSessionMemberForFamily(req);
   if (!sessionMember) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (sessionMember.role !== "owner" && sessionMember.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 // PATCH — approve or deny a request
 // Body: { request_id, action: "approve" | "deny", role?: string }
 export async function PATCH(req: NextRequest) {
-  const sessionMember = await getSessionMember();
+  const sessionMember = await getSessionMemberForFamily(req);
   if (!sessionMember) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (sessionMember.role !== "owner" && sessionMember.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -96,16 +96,26 @@ export async function PATCH(req: NextRequest) {
     .maybeSingle();
 
   if (pendingMember) {
-    // Row already exists — just mark it accepted and update the role
+    // Row already exists — mark accepted and link user account if not already linked
+    const { data: approvedUser } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("email", joinReq.email.toLowerCase().trim())
+      .maybeSingle();
+
     await supabaseAdmin
       .from("family_members")
       .update({
-        invite_status: "accepted",
-        is_active:     true,
+        invite_status:    "accepted",
+        is_active:        true,
         role,
-        invite_token:  null,
-        joined_at:     new Date().toISOString(),
-        updated_at:    new Date().toISOString(),
+        invite_token:     null,
+        joined_at:        new Date().toISOString(),
+        updated_at:       new Date().toISOString(),
+        // Link user account if not already linked
+        ...(approvedUser && !pendingMember.nextauth_user_id
+          ? { nextauth_user_id: approvedUser.id }
+          : {}),
       })
       .eq("id", pendingMember.id);
   } else {
