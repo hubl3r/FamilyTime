@@ -16,10 +16,16 @@ function VideoTile({ stream, name, initials, color, isMuted, isCameraOff, isLoca
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
+    if (!videoRef.current) return;
+    if (stream) {
+      // Always reassign srcObject when stream changes
       videoRef.current.srcObject = stream;
+      // Force play — some browsers need this after srcObject is set
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.srcObject = null;
     }
-  }, [stream]);
+  }, [stream, stream?.id]); // re-run when stream identity changes
 
   return (
     <div style={{ position:"relative", background:"#1a1a2e", borderRadius:16, overflow:"hidden", aspectRatio:"16/9", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -221,10 +227,14 @@ export function CallPiP({ localStream, remotePeers, callType, onExpand, onEndCal
   const streamToShow = firstPeer?.stream ?? localStream;
 
   useEffect(() => {
-    if (videoRef.current && streamToShow) {
+    if (!videoRef.current) return;
+    if (streamToShow) {
       videoRef.current.srcObject = streamToShow;
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.srcObject = null;
     }
-  }, [streamToShow]);
+  }, [streamToShow, streamToShow?.id]);
 
   return (
     <div

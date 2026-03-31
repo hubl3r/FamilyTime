@@ -94,11 +94,27 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
     const remoteStream = new MediaStream();
     pc.ontrack = (event) => {
-      event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+      // Add the track directly — more reliable than relying on event.streams
+      const track = event.track;
+      // Remove existing track of same kind to avoid duplicates
+      remoteStream.getTracks()
+        .filter(t => t.kind === track.kind)
+        .forEach(t => remoteStream.removeTrack(t));
+      remoteStream.addTrack(track);
+
+      // Also add from streams if available
+      if (event.streams[0]) {
+        event.streams[0].getTracks().forEach(t => {
+          if (!remoteStream.getTracks().find(rt => rt.id === t.id)) {
+            remoteStream.addTrack(t);
+          }
+        });
+      }
+
       setRemotePeers(prev => {
         const next = new Map(prev);
         const existing = next.get(peerId);
-        next.set(peerId, { ...existing!, stream: remoteStream });
+        next.set(peerId, { ...existing!, stream: new MediaStream(remoteStream.getTracks()) });
         return next;
       });
     };
