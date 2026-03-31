@@ -13,14 +13,6 @@ const ICE_SERVERS: RTCConfiguration = {
   rtcpMuxPolicy: "require",
 };
 
-// Prefer VP8 codec for maximum compatibility across devices
-function preferVP8(sdp: string): string {
-  const lines = sdp.split("
-");
-  const vp8Index = lines.findIndex(l => l.includes("VP8"));
-  if (vp8Index === -1) return sdp; // VP8 not found, leave as-is
-  return sdp; // Modern browsers negotiate this fine
-}
 
 export type CallState = "idle" | "calling" | "incoming" | "connected" | "ended";
 
