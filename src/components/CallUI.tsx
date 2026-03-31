@@ -110,7 +110,7 @@ export function IncomingCallOverlay({ call, onAccept, onDecline }: {
 }
 
 // ── In-call view ──────────────────────────────────────────────
-export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isScreenSharing, callType, myName, myInitials, myColor, onToggleMute, onToggleCamera, onToggleScreenShare, onEndCall }: {
+export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isScreenSharing, callType, myName, myInitials, myColor, onToggleMute, onToggleCamera, onToggleScreenShare, onEndCall, onMinimize }: {
   localStream: MediaStream | null;
   remotePeers: Map<string, RemotePeer>;
   isMuted: boolean;
@@ -124,6 +124,7 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
   onEndCall: () => void;
+  onMinimize?: () => void;
 }) {
   const peers = Array.from(remotePeers.values());
   const totalParticipants = peers.length + 1; // +1 for local
@@ -189,9 +190,76 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
           </ControlBtn>
         )}
 
+        {onMinimize && (
+          <ControlBtn onClick={onMinimize} label="Minimize">
+            ⬇️
+          </ControlBtn>
+        )}
         <ControlBtn onClick={onEndCall} danger label="End">
           📵
         </ControlBtn>
+      </div>
+    </div>
+  );
+}
+
+// ── Picture-in-Picture bubble ─────────────────────────────────
+export function CallPiP({ localStream, remotePeers, callType, onExpand, onEndCall, isMuted, onToggleMute }: {
+  localStream: MediaStream | null;
+  remotePeers: Map<string, import("@/hooks/useWebRTC").RemotePeer>;
+  callType: "video" | "audio";
+  onExpand: () => void;
+  onEndCall: () => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const peers = Array.from(remotePeers.values());
+  const firstPeer = peers[0];
+
+  // Show remote video in PiP, or local if no remote yet
+  const streamToShow = firstPeer?.stream ?? localStream;
+
+  useEffect(() => {
+    if (videoRef.current && streamToShow) {
+      videoRef.current.srcObject = streamToShow;
+    }
+  }, [streamToShow]);
+
+  return (
+    <div
+      onClick={onExpand}
+      style={{
+        position:"fixed", bottom:90, right:16,
+        width:120, height:90,
+        borderRadius:16, overflow:"hidden",
+        background:"#1a1a2e",
+        boxShadow:"0 8px 32px rgba(0,0,0,0.4)",
+        zIndex:998, cursor:"pointer",
+        border:"2px solid rgba(255,255,255,0.2)",
+      }}
+    >
+      {callType === "video" && streamToShow ? (
+        <video ref={videoRef} autoPlay playsInline muted={!firstPeer}
+          style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+      ) : (
+        <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:4 }}>
+          <div style={{ fontSize:28 }}>📞</div>
+          <div style={{ fontSize:10, color:"rgba(255,255,255,0.7)", fontWeight:600 }}>
+            {peers.length > 0 ? `${peers.length} connected` : "Calling..."}
+          </div>
+        </div>
+      )}
+
+      {/* Controls overlay */}
+      <div style={{ position:"absolute", bottom:4, left:0, right:0, display:"flex", justifyContent:"center", gap:6 }}
+        onClick={e => e.stopPropagation()}>
+        <button onClick={onToggleMute} style={{ width:26, height:26, borderRadius:8, background:"rgba(0,0,0,0.6)", border:"none", cursor:"pointer", fontSize:12, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          {isMuted ? "🔇" : "🎤"}
+        </button>
+        <button onClick={onEndCall} style={{ width:26, height:26, borderRadius:8, background:"rgba(220,38,38,0.8)", border:"none", cursor:"pointer", fontSize:12, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          📵
+        </button>
       </div>
     </div>
   );

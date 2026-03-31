@@ -28,6 +28,7 @@
   --font-display: 'Fraunces', Georgia, serif;
   --font-body:    'Nunito', system-ui, sans-serif;
   --nav-height:   68px;
+  --nav-width:    72px; /* landscape side nav width */
   --radius:       16px;
   --radius-sm:    10px;
 
@@ -50,3 +51,40 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--tan-deep); border-radius: 99px; }
+
+/* ── Landscape layout ── */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --nav-height: 0px; /* bottom nav hidden in landscape */
+  }
+
+  /* Dashboard wrapper switches to row layout */
+  .dashboard-wrapper {
+    flex-direction: row !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Side nav in landscape */
+  .bottom-nav-landscape {
+    display: flex !important;
+  }
+  .bottom-nav-portrait {
+    display: none !important;
+  }
+
+  /* Main content gets left margin for side nav */
+  .dashboard-main {
+    margin-left: var(--nav-width) !important;
+    padding: 0 12px !important;
+  }
+
+  /* Header becomes more compact */
+  .dashboard-header {
+    padding: 6px 12px !important;
+  }
+}
+
+@media (orientation: portrait) {
+  .bottom-nav-landscape { display: none !important; }
+  .bottom-nav-portrait  { display: flex !important; }
+}

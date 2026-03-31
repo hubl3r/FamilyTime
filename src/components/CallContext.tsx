@@ -1,8 +1,8 @@
 // src/components/CallContext.tsx
 "use client";
-import { createContext, useContext, useEffect, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode } from "react";
 import { useWebRTC, CallState, RemotePeer, IncomingCall } from "@/hooks/useWebRTC";
-import { IncomingCallOverlay, InCallView } from "./CallUI";
+import { IncomingCallOverlay, InCallView, CallPiP } from "./CallUI";
 import { useUser } from "./UserContext";
 
 type CallContextType = {
@@ -14,12 +14,14 @@ type CallContextType = {
   isScreenSharing:    boolean;
   callType:           "video" | "audio";
   incomingCall:       IncomingCall | null;
+  isFullScreen:       boolean;
   startCall:          (channelId: string, type?: "video" | "audio") => void;
   endCall:            () => void;
   toggleMute:         () => void;
   toggleCamera:       () => void;
   toggleScreenShare:  () => void;
   subscribeToChannel: (channelId: string) => void;
+  setFullScreen:      (v: boolean) => void;
 };
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -32,6 +34,7 @@ export function useCall() {
 
 export function CallProvider({ children }: { children: ReactNode }) {
   const { me } = useUser();
+  const [isFullScreen, setFullScreen] = useState(true);
 
   const myName     = me ? `${me.first_name} ${me.last_name}` : "";
   const myInitials = me?.initials ?? "";
@@ -45,63 +48,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     myColor,
   });
 
-  const globalPollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastSignalTime  = useRef<string>(new Date(Date.now() - 5000).toISOString());
-  const channelIdsRef   = useRef<string[]>([]);
-
-  // Keep channel list in sync
-  useEffect(() => {
-    if (!me?.families) return;
-    // Fetch all channels this user is in
-    fetch("/api/messages/channels")
-      .then(r => r.ok ? r.json() : [])
-      .then(channels => {
-        channelIdsRef.current = channels.map((c: { id: string }) => c.id);
-      })
-      .catch(() => {});
-  }, [me?.email]);
-
-  // Global poller — checks ALL channels for incoming call signals
-  // This runs regardless of which page the user is on
-  useEffect(() => {
-    if (!myEmail) return;
-
-    const poll = async () => {
-      if (document.hidden) return;
-      const channelIds = channelIdsRef.current;
-      if (channelIds.length === 0) return;
-
-      // Poll each channel for new signals
-      for (const chanId of channelIds) {
-        try {
-          const res = await fetch(
-            `/api/calls/signal?channel_id=${chanId}&after=${encodeURIComponent(lastSignalTime.current)}`
-          );
-          if (!res.ok) continue;
-          const signals = await res.json();
-          if (signals.length > 0) {
-            lastSignalTime.current = signals[signals.length - 1].created_at;
-            // Pass signals to the WebRTC hook's handler
-            // Only process call-invite here — other signals handled per-channel
-            for (const signal of signals) {
-              if (signal.type === "call-invite") {
-                // Trigger the incoming call UI by subscribing to that channel
-                webrtc.subscribeToChannel(chanId);
-                break;
-              }
-            }
-          }
-        } catch { /* silent */ }
-      }
-    };
-
-    globalPollRef.current = setInterval(poll, 2000);
-    poll();
-
-    return () => {
-      if (globalPollRef.current) clearInterval(globalPollRef.current);
-    };
-  }, [myEmail, webrtc.subscribeToChannel]);
+  const isInCall = webrtc.callState === "connected" || webrtc.callState === "calling";
 
   const value: CallContextType = {
     callState:          webrtc.callState,
@@ -112,27 +59,31 @@ export function CallProvider({ children }: { children: ReactNode }) {
     isScreenSharing:    webrtc.isScreenSharing,
     callType:           webrtc.callType,
     incomingCall:       webrtc.incomingCall,
-    startCall:          webrtc.startCall,
+    isFullScreen,
+    startCall:          (channelId, type) => { webrtc.startCall(channelId, type); setFullScreen(true); },
     endCall:            webrtc.endCall,
     toggleMute:         webrtc.toggleMute,
     toggleCamera:       webrtc.toggleCamera,
     toggleScreenShare:  webrtc.toggleScreenShare,
     subscribeToChannel: webrtc.subscribeToChannel,
+    setFullScreen,
   };
 
   return (
     <CallContext.Provider value={value}>
       {children}
 
+      {/* Incoming call overlay */}
       {webrtc.incomingCall && webrtc.callState === "incoming" && (
         <IncomingCallOverlay
           call={webrtc.incomingCall}
-          onAccept={webrtc.acceptCall}
+          onAccept={() => { webrtc.acceptCall(); setFullScreen(true); }}
           onDecline={webrtc.declineCall}
         />
       )}
 
-      {(webrtc.callState === "connected" || webrtc.callState === "calling") && (
+      {/* In-call: full screen or PiP */}
+      {isInCall && isFullScreen && (
         <InCallView
           localStream={webrtc.localStream}
           remotePeers={webrtc.remotePeers}
@@ -146,6 +97,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
           onToggleMute={webrtc.toggleMute}
           onToggleCamera={webrtc.toggleCamera}
           onToggleScreenShare={webrtc.toggleScreenShare}
+          onEndCall={webrtc.endCall}
+          onMinimize={() => setFullScreen(false)}
+        />
+      )}
+
+      {/* PiP when minimized */}
+      {isInCall && !isFullScreen && (
+        <CallPiP
+          localStream={webrtc.localStream}
+          remotePeers={webrtc.remotePeers}
+          callType={webrtc.callType}
+          isMuted={webrtc.isMuted}
+          onToggleMute={webrtc.toggleMute}
+          onExpand={() => setFullScreen(true)}
           onEndCall={webrtc.endCall}
         />
       )}
