@@ -14,6 +14,7 @@ type CallContextType = {
   isScreenSharing:    boolean;
   callType:           "video" | "audio";
   incomingCall:       IncomingCall | null;
+  waitingCall:        IncomingCall | null;
   isFullScreen:       boolean;
   autoAnswer:         boolean;
   setAutoAnswer:      (v: boolean) => void;
@@ -24,6 +25,9 @@ type CallContextType = {
   toggleScreenShare:  () => void;
   subscribeToChannel: (channelId: string) => void;
   setFullScreen:      (v: boolean) => void;
+  acceptWaitingCall:  () => void;
+  mergeWaitingCall:   () => void;
+  declineWaitingCall: () => void;
 };
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -68,6 +72,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     isScreenSharing:    webrtc.isScreenSharing,
     callType:           webrtc.callType,
     incomingCall:       webrtc.incomingCall,
+    waitingCall:        webrtc.waitingCall,
     isFullScreen,
     autoAnswer,
     setAutoAnswer,
@@ -78,6 +83,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     toggleScreenShare:  webrtc.toggleScreenShare,
     subscribeToChannel: webrtc.subscribeToChannel,
     setFullScreen,
+    acceptWaitingCall:  webrtc.acceptWaitingCall,
+    mergeWaitingCall:   webrtc.mergeWaitingCall,
+    declineWaitingCall: webrtc.declineWaitingCall,
   };
 
   return (
@@ -109,11 +117,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
           calleeName={calleeName || webrtc.incomingCall?.fromName}
           calleeInitials={calleeInitials || webrtc.incomingCall?.fromInitials}
           calleeColor={calleeColor || webrtc.incomingCall?.fromColor}
+          waitingCall={webrtc.waitingCall}
           onToggleMute={webrtc.toggleMute}
           onToggleCamera={webrtc.toggleCamera}
           onToggleScreenShare={webrtc.toggleScreenShare}
           onEndCall={webrtc.endCall}
           onMinimize={() => setFullScreen(false)}
+          onAcceptWaiting={webrtc.acceptWaitingCall}
+          onMergeWaiting={webrtc.mergeWaitingCall}
+          onDeclineWaiting={webrtc.declineWaitingCall}
         />
       )}
 

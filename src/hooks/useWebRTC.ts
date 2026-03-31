@@ -45,6 +45,7 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
   const [localStream, setLocalStream]     = useState<MediaStream | null>(null);
   const [remotePeers, setRemotePeers]     = useState<Map<string, RemotePeer>>(new Map());
   const [incomingCall, setIncomingCall]   = useState<IncomingCall | null>(null);
+  const [waitingCall, setWaitingCall]     = useState<IncomingCall | null>(null); // call waiting while in a call
   const [isMuted, setIsMuted]             = useState(false);
   const [isCameraOff, setIsCameraOff]     = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -159,8 +160,7 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
     switch (signal.type) {
       case "call-invite": {
-        if (callStateRef.current !== "idle") return;
-        setIncomingCall({
+        const newCall: IncomingCall = {
           sessionId:    sessId,
           channelId:    chanId,
           fromUserId:   signal.from_user_id,
@@ -168,8 +168,14 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
           fromInitials: signal.from_initials,
           fromColor:    signal.from_color,
           type:         (signal.payload?.type as "video" | "audio") ?? "video",
-        });
-        setCallState("incoming");
+        };
+        if (callStateRef.current === "idle") {
+          setIncomingCall(newCall);
+          setCallState("incoming");
+        } else if (callStateRef.current === "connected" || callStateRef.current === "calling") {
+          // Queue as waiting call — show banner without interrupting current call
+          setWaitingCall(newCall);
+        }
         break;
       }
 
@@ -523,10 +529,44 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
     if (globalPollRef.current) clearInterval(globalPollRef.current);
   }, [stopPolling]);
 
+  // Accept waiting call — end current call first then accept
+  const acceptWaitingCall = useCallback(async () => {
+    if (!waitingCall) return;
+    const pending = waitingCall;
+    setWaitingCall(null);
+    await endCall();
+    // Small delay for cleanup
+    await new Promise(r => setTimeout(r, 800));
+    setIncomingCall(pending);
+    setCallState("incoming");
+  }, [waitingCall, endCall]);
+
+  // Merge waiting call into current session (add as new peer)
+  const mergeWaitingCall = useCallback(async () => {
+    if (!waitingCall) return;
+    const pending = waitingCall;
+    setWaitingCall(null);
+    // Signal acceptance to the waiting caller
+    await sendSignal("call-accepted", {}, pending.channelId, pending.sessionId, pending.fromUserId);
+    await sendSignal("peer-joined", {}, pending.channelId, pending.sessionId);
+    // Join their session too
+    await fetch("/api/calls/session", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: pending.sessionId, action: "join" }),
+    });
+  }, [waitingCall, sendSignal]);
+
+  const declineWaitingCall = useCallback(async () => {
+    if (!waitingCall) return;
+    await sendSignal("call-declined", {}, waitingCall.channelId, waitingCall.sessionId, waitingCall.fromUserId);
+    setWaitingCall(null);
+  }, [waitingCall, sendSignal]);
+
   return {
     callState, sessionId, channelId, localStream, remotePeers,
-    incomingCall, isMuted, isCameraOff, isScreenSharing, callType,
+    incomingCall, waitingCall, isMuted, isCameraOff, isScreenSharing, callType,
     startCall, acceptCall, declineCall, endCall,
+    acceptWaitingCall, mergeWaitingCall, declineWaitingCall,
     toggleMute, toggleCamera, toggleScreenShare,
     subscribeToChannel,
   };

@@ -228,6 +228,45 @@ function SelfViewPiP({ stream, initials, color, isMuted, isCameraOff }: {
   );
 }
 
+// ── Call waiting banner ──────────────────────────────────────
+export function CallWaitingBanner({ call, onAccept, onMerge, onDecline }: {
+  call: import("@/hooks/useWebRTC").IncomingCall;
+  onAccept: () => void;
+  onMerge: () => void;
+  onDecline: () => void;
+}) {
+  const [show, setShow] = useState(true);
+
+  if (!show) return null;
+
+  return (
+    <div style={{
+      position:"absolute", top:12, left:12, right:12,
+      background:"rgba(20,20,35,0.95)", backdropFilter:"blur(12px)",
+      borderRadius:18, padding:"14px 16px",
+      border:"1px solid rgba(255,255,255,0.15)",
+      boxShadow:"0 8px 32px rgba(0,0,0,0.5)",
+      zIndex:20, display:"flex", alignItems:"center", gap:12,
+      animation:"slideDown 0.3s ease",
+    }}>
+      <div style={{ width:44, height:44, borderRadius:14, background:call.fromColor, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:800, color:"#fff", flexShrink:0, position:"relative" }}>
+        {call.fromInitials}
+        <div style={{ position:"absolute", inset:-3, borderRadius:17, border:`2px solid ${call.fromColor}`, opacity:0.4, animation:"cpulse 1.5s infinite" }}/>
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ color:"#fff", fontSize:14, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{call.fromName}</div>
+        <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12 }}>Incoming {call.type === "video" ? "video" : "voice"} call</div>
+      </div>
+      <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+        <button onClick={onDecline} title="Decline" style={{ width:36, height:36, borderRadius:11, background:"#DC2626", border:"none", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>📵</button>
+        <button onClick={onMerge} title="Add to call" style={{ width:36, height:36, borderRadius:11, background:"#2563EB", border:"none", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>➕</button>
+        <button onClick={onAccept} title="Switch to this call" style={{ width:36, height:36, borderRadius:11, background:"#16A34A", border:"none", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>📞</button>
+      </div>
+      <style>{`@keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    </div>
+  );
+}
+
 // ── Incoming call overlay ─────────────────────────────────────
 export function IncomingCallOverlay({ call, onAccept, onDecline, autoAnswerSeconds }: {
   call: IncomingCall; onAccept: () => void; onDecline: () => void;
@@ -269,19 +308,44 @@ export function IncomingCallOverlay({ call, onAccept, onDecline, autoAnswerSecon
 }
 
 // ── In-call view ──────────────────────────────────────────────
-export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isScreenSharing, callType, myName, myInitials, myColor, calleeName, calleeInitials, calleeColor, onToggleMute, onToggleCamera, onToggleScreenShare, onEndCall, onMinimize }: {
+export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isScreenSharing, callType, myName, myInitials, myColor, calleeName, calleeInitials, calleeColor, waitingCall, onToggleMute, onToggleCamera, onToggleScreenShare, onEndCall, onMinimize, onAcceptWaiting, onMergeWaiting, onDeclineWaiting }: {
   localStream: MediaStream | null; remotePeers: Map<string, RemotePeer>;
   isMuted: boolean; isCameraOff: boolean; isScreenSharing: boolean;
   callType: "video"|"audio"; myName: string; myInitials: string; myColor: string;
   calleeName?: string; calleeInitials?: string; calleeColor?: string;
+  waitingCall?: import("@/hooks/useWebRTC").IncomingCall | null;
   onToggleMute: () => void; onToggleCamera: () => void;
   onToggleScreenShare: () => void; onEndCall: () => void; onMinimize?: () => void;
+  onAcceptWaiting?: () => void; onMergeWaiting?: () => void; onDeclineWaiting?: () => void;
 }) {
   const peers = Array.from(remotePeers.values());
   const hasRemote = peers.length > 0;
   const [showAudio, setShowAudio] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const lastDist = useRef(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      lastDist.current = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const delta = dist / lastDist.current;
+      setZoom(z => Math.min(3, Math.max(1, z * delta)));
+      lastDist.current = dist;
+    }
+  };
+  const onDoubleTap = () => setZoom(z => z > 1 ? 1 : 2);
 
   useEffect(() => {
     const check = () => setIsLandscape(window.innerWidth > window.innerHeight * 1.2);
@@ -318,16 +382,19 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
             {hasRemote ? (callType==="video" ? "📹 Video call" : "📞 Voice call") : "Calling..."}
           </div>
           {hasRemote && <div style={{ color:"rgba(255,255,255,0.6)", fontSize:13, fontWeight:700 }}>{timeStr}</div>}
-          {onMinimize && (
-            <button onClick={onMinimize} style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:10, padding:"5px 10px", color:"rgba(255,255,255,0.7)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
-              ↙ PiP
-            </button>
-          )}
+  
         </div>
       )}
 
-      {/* Video area */}
-      <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
+      {/* Video area with pinch-to-zoom */}
+      <div style={{ flex:1, position:"relative", overflow:"hidden" }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onDoubleClick={onDoubleTap}>
+        {/* Waiting call banner */}
+        {waitingCall && onAcceptWaiting && onMergeWaiting && onDeclineWaiting && (
+          <CallWaitingBanner call={waitingCall} onAccept={onAcceptWaiting} onMerge={onMergeWaiting} onDecline={onDeclineWaiting}/>
+        )}
         {/* Waiting to connect */}
         {!hasRemote && (
           <CallingScreen calleeName={calleeName??"..."} calleeInitials={calleeInitials??"?"} calleeColor={calleeColor??"#E8A5A5"} callType={callType} elapsed={elapsed}/>
@@ -341,13 +408,13 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
 
         {/* 1-on-1: remote fills screen */}
         {hasRemote && peers.length===1 && (
-          <div style={{ position:"absolute", inset:0 }}>
+          <div style={{ position:"absolute", inset:0, transform:`scale(${zoom})`, transformOrigin:"center center", transition:"transform 0.1s" }}>
             <VideoTile stream={peers[0].stream} name={peers[0].name} initials={peers[0].initials} color={peers[0].color} isMuted={peers[0].audioMuted}/>
           </div>
         )}
         {/* Grid for 2+ */}
         {hasRemote && peers.length>=2 && (
-          <div style={{ position:"absolute", inset:0, display:"grid", gridTemplateColumns: peers.length<=2?"1fr":"1fr 1fr", gap:2 }}>
+          <div style={{ position:"absolute", inset:0, display:"grid", gridTemplateColumns: peers.length<=2?"1fr":"1fr 1fr", gap:2, transform:`scale(${zoom})`, transformOrigin:"center center" }}>
             {peers.map(p => <VideoTile key={p.userId} stream={p.stream} name={p.name} initials={p.initials} color={p.color} isMuted={p.audioMuted}/>)}
           </div>
         )}
@@ -401,6 +468,9 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
           <ControlBtn onClick={() => setShowAudio(v=>!v)} active={showAudio} label="Audio">🔊</ControlBtn>
           {showAudio && <AudioDeviceMenu onClose={() => setShowAudio(false)}/>}
         </div>
+        {onMinimize && (
+          <ControlBtn onClick={onMinimize} label="Chat">💬</ControlBtn>
+        )}
         <ControlBtn onClick={onEndCall} danger label="End">📵</ControlBtn>
       </div>
     </div>
