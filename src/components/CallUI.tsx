@@ -14,18 +14,32 @@ function VideoTile({ stream, name, initials, color, isMuted, isCameraOff, isLoca
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (!videoRef.current) return;
-    if (stream) {
-      videoRef.current.srcObject = stream;
-      // Apply current audio sink if set
-      if (!isLocal && globalSinkId && "setSinkId" in videoRef.current) {
-        (videoRef.current as HTMLVideoElement & { setSinkId:(id:string)=>Promise<void> })
-          .setSinkId(globalSinkId).catch(()=>{});
+    const el = videoRef.current;
+    if (!el) return;
+
+    const attach = () => {
+      if (!el) return;
+      if (stream) {
+        if (el.srcObject !== stream) {
+          el.srcObject = stream;
+        }
+        // Apply audio sink
+        if (!isLocal && globalSinkId && "setSinkId" in el) {
+          (el as HTMLVideoElement & { setSinkId:(id:string)=>Promise<void> })
+            .setSinkId(globalSinkId).catch(()=>{});
+        }
+        el.play().catch(()=>{});
+      } else {
+        el.srcObject = null;
       }
-      videoRef.current.play().catch(()=>{});
-    } else {
-      videoRef.current.srcObject = null;
-    }
+    };
+
+    attach();
+
+    // Reattach when page becomes visible (screen wake, tab switch)
+    const onVisible = () => { if (!document.hidden) attach(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [stream, stream?.id, isLocal]);
 
   return (
@@ -112,10 +126,20 @@ function AudioDeviceMenu({ onClose }: { onClose: () => void }) {
   const selectDevice = async (deviceId: string) => {
     globalSinkId = deviceId;
     setSelected(deviceId);
-    // Apply to ALL video/audio elements currently in the DOM
-    document.querySelectorAll<HTMLVideoElement & { setSinkId?: (id:string)=>Promise<void> }>("video, audio").forEach(el => {
-      if (el.setSinkId) el.setSinkId(deviceId).catch(()=>{});
-    });
+
+    // Apply to all media elements — setSinkId needs readyState > 0 on some browsers
+    const apply = async (el: HTMLVideoElement) => {
+      if (!("setSinkId" in el)) return;
+      const sink = el as HTMLVideoElement & { setSinkId:(id:string)=>Promise<void> };
+      try {
+        await sink.setSinkId(deviceId);
+      } catch {
+        // Try after a short delay if element not ready
+        setTimeout(() => sink.setSinkId(deviceId).catch(()=>{}), 500);
+      }
+    };
+
+    document.querySelectorAll<HTMLVideoElement>("video, audio").forEach(el => apply(el));
     onClose();
   };
 
@@ -400,9 +424,20 @@ export function CallPiP({ localStream, remotePeers, callType, onExpand, onEndCal
   const streamToShow = peers[0]?.stream ?? localStream;
 
   useEffect(() => {
-    if (!videoRef.current) return;
-    if (streamToShow) { videoRef.current.srcObject = streamToShow; videoRef.current.play().catch(()=>{}); }
-    else videoRef.current.srcObject = null;
+    const el = videoRef.current;
+    if (!el) return;
+    const attach = () => {
+      if (streamToShow) {
+        if (el.srcObject !== streamToShow) el.srcObject = streamToShow;
+        el.play().catch(()=>{});
+      } else {
+        el.srcObject = null;
+      }
+    };
+    attach();
+    const onVisible = () => { if (!document.hidden) attach(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [streamToShow, streamToShow?.id]);
 
   const onPointerDown = (e: React.PointerEvent) => {

@@ -445,37 +445,77 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
   }, []);
 
   // ── Screen share ──────────────────────────────────────────────
-  const toggleScreenShare = useCallback(async () => {
-    if (isScreenSharing) {
-      screenStreamRef.current?.getTracks().forEach(t => t.stop());
-      screenStreamRef.current = null;
-      const cameraStream = await getLocalStream(callType);
+  const isScreenSharingRef = useRef(false);
+
+  const stopScreenShare = useCallback(async () => {
+    screenStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    // Restore camera
+    try {
+      const cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode:"user" } });
       const videoTrack = cameraStream.getVideoTracks()[0];
-      peerConnections.current.forEach(pc => {
+      // Replace in all peer connections and renegotiate
+      for (const [peerId, pc] of peerConnections.current) {
         const sender = pc.getSenders().find(s => s.track?.kind === "video");
-        if (sender && videoTrack) sender.replaceTrack(videoTrack);
-      });
-      setIsScreenSharing(false);
-    } else {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        screenStreamRef.current = screenStream;
-        const screenTrack = screenStream.getVideoTracks()[0];
-        peerConnections.current.forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track?.kind === "video");
-          if (sender) sender.replaceTrack(screenTrack);
-        });
-        if (localStreamRef.current) {
-          const oldVideo = localStreamRef.current.getVideoTracks()[0];
-          if (oldVideo) localStreamRef.current.removeTrack(oldVideo);
-          localStreamRef.current.addTrack(screenTrack);
-          setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+        if (sender && videoTrack) {
+          await sender.replaceTrack(videoTrack);
+          // Renegotiate
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await sendSignal("offer", { sdp: offer }, channelIdRef.current ?? "", sessionIdRef.current ?? "", peerId);
         }
-        screenTrack.onended = () => toggleScreenShare();
-        setIsScreenSharing(true);
-      } catch { /* user cancelled */ }
+      }
+      // Update local stream preview
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach(t => localStreamRef.current!.removeTrack(t));
+        localStreamRef.current.addTrack(videoTrack);
+        setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      }
+    } catch { /* silent */ }
+    setIsScreenSharing(false);
+    isScreenSharingRef.current = false;
+  }, [sendSignal]);
+
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharingRef.current) {
+      await stopScreenShare();
+      return;
     }
-  }, [isScreenSharing, callType, getLocalStream]);
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "monitor" } as MediaTrackConstraints,
+        audio: false,
+      });
+      screenStreamRef.current = screenStream;
+      const screenTrack = screenStream.getVideoTracks()[0];
+
+      // Replace track in all peer connections and renegotiate
+      for (const [peerId, pc] of peerConnections.current) {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) {
+          await sender.replaceTrack(screenTrack);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await sendSignal("offer", { sdp: offer }, channelIdRef.current ?? "", sessionIdRef.current ?? "", peerId);
+        }
+      }
+
+      // Update local stream for self-preview
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach(t => localStreamRef.current!.removeTrack(t));
+        localStreamRef.current.addTrack(screenTrack);
+        setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      }
+
+      // Auto-stop when user clicks browser "Stop sharing" button
+      screenTrack.onended = () => stopScreenShare();
+      setIsScreenSharing(true);
+      isScreenSharingRef.current = true;
+    } catch (e) {
+      // User cancelled or not supported
+      console.log("Screen share cancelled or not supported:", e);
+    }
+  }, [stopScreenShare, sendSignal]);
 
   // Cleanup on unmount
   useEffect(() => () => {
