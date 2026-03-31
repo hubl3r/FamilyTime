@@ -383,11 +383,36 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
     setRemotePeers(new Map());
     setCallState("idle");
     setSessionId(null);
+    setChannelId(null);
     setIncomingCall(null);
     setIsMuted(false);
     setIsCameraOff(false);
     setIsScreenSharing(false);
-  }, [stopPolling]);
+
+    // Restart global poll so we can receive future incoming calls
+    if (globalPollRef.current) clearInterval(globalPollRef.current);
+    globalPollRef.current = null;
+    globalLastTime.current = new Date(Date.now() - 5000).toISOString();
+
+    if (watchedChannels.current.size > 0) {
+      const globalPoll = async () => {
+        if (document.hidden) return;
+        for (const id of watchedChannels.current) {
+          try {
+            const res = await fetch(`/api/calls/signal?channel_id=${id}&after=${encodeURIComponent(globalLastTime.current)}`);
+            if (!res.ok) continue;
+            const signals = await res.json();
+            if (signals.length > 0) {
+              globalLastTime.current = signals[signals.length - 1].created_at;
+              for (const signal of signals) await handleSignal({ ...signal, channel_id: id });
+            }
+          } catch { /* silent */ }
+        }
+      };
+      globalPoll();
+      globalPollRef.current = setInterval(globalPoll, 2000);
+    }
+  }, [stopPolling, handleSignal]);
 
   // ── End call ──────────────────────────────────────────────────
   const endCall = useCallback(async () => {

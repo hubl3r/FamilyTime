@@ -133,48 +133,75 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
   onMinimize?: () => void;
 }) {
   const peers = Array.from(remotePeers.values());
-  const totalParticipants = peers.length + 1; // +1 for local
+  const hasRemote = peers.length > 0;
 
-  // Grid layout based on participant count
-  const gridCols = totalParticipants <= 2 ? 1 : 2;
+  // When remote peers are connected: remote = full screen, local = PiP
+  // When no remote yet (calling state): local = full screen
+  // For 3-4 people: 2x2 grid for remotes, no local PiP
+  const useFullscreenLayout = hasRemote && peers.length === 1;
+  const useGridLayout = peers.length >= 2;
+  const gridCols = peers.length <= 2 ? 1 : 2;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"#0f0f1a", display:"flex", flexDirection:"column", zIndex:999 }}>
-      {/* Video grid */}
-      <div style={{ flex:1, display:"grid", gridTemplateColumns:`repeat(${gridCols}, 1fr)`, gap:8, padding:8, overflow:"hidden" }}>
-        {/* Remote peers */}
-        {peers.map(peer => (
-          <VideoTile
-            key={peer.userId}
-            stream={peer.stream}
-            name={peer.name}
-            initials={peer.initials}
-            color={peer.color}
-            isMuted={peer.audioMuted}
-            isCameraOff={peer.videoMuted}
-          />
-        ))}
+      {/* Video area */}
+      <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
 
-        {/* Local video */}
-        {callType === "video" ? (
-          <VideoTile
-            stream={localStream}
-            name="You"
-            initials={myInitials}
-            color={myColor}
-            isMuted={isMuted}
-            isCameraOff={isCameraOff}
-            isLocal
-          />
-        ) : (
-          /* Audio only — show avatar */
-          <VideoTile
-            stream={null}
-            name="You"
-            initials={myInitials}
-            color={myColor}
-            isMuted={isMuted}
-          />
+        {/* ── 1-on-1: remote full screen ── */}
+        {useFullscreenLayout && (
+          <div style={{ position:"absolute", inset:0 }}>
+            <VideoTile
+              stream={peers[0].stream}
+              name={peers[0].name}
+              initials={peers[0].initials}
+              color={peers[0].color}
+              isMuted={peers[0].audioMuted}
+              isCameraOff={peers[0].videoMuted}
+            />
+          </div>
+        )}
+
+        {/* ── Calling / no remote yet: local full screen ── */}
+        {!hasRemote && callType === "video" && (
+          <div style={{ position:"absolute", inset:0 }}>
+            <VideoTile stream={localStream} name="You" initials={myInitials} color={myColor} isMuted={isMuted} isCameraOff={isCameraOff} isLocal/>
+          </div>
+        )}
+        {!hasRemote && callType === "audio" && (
+          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12 }}>
+            <div style={{ width:80, height:80, borderRadius:24, background:myColor, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, fontWeight:800, color:"#fff" }}>{myInitials}</div>
+            <div style={{ color:"rgba(255,255,255,0.7)", fontSize:16, fontWeight:600 }}>Calling...</div>
+          </div>
+        )}
+
+        {/* ── Grid for 3-4 people ── */}
+        {useGridLayout && (
+          <div style={{ position:"absolute", inset:0, display:"grid", gridTemplateColumns:`repeat(${gridCols}, 1fr)`, gap:4, padding:4 }}>
+            {peers.map(peer => (
+              <VideoTile key={peer.userId} stream={peer.stream} name={peer.name} initials={peer.initials} color={peer.color} isMuted={peer.audioMuted} isCameraOff={peer.videoMuted}/>
+            ))}
+          </div>
+        )}
+
+        {/* ── Local self-view PiP (shown when remote is connected) ── */}
+        {hasRemote && callType === "video" && (
+          <div style={{ position:"absolute", bottom:16, right:16, width:100, height:140, borderRadius:14, overflow:"hidden", border:"2px solid rgba(255,255,255,0.3)", boxShadow:"0 4px 16px rgba(0,0,0,0.4)", zIndex:10 }}>
+            <VideoTile stream={localStream} name="You" initials={myInitials} color={myColor} isMuted={isMuted} isCameraOff={isCameraOff} isLocal/>
+          </div>
+        )}
+
+        {/* Audio-only remote: show avatar */}
+        {hasRemote && callType === "audio" && (
+          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:12 }}>
+            {peers.map(p => (
+              <div key={p.userId} style={{ textAlign:"center" }}>
+                <div style={{ width:80, height:80, borderRadius:24, background:p.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, fontWeight:800, color:"#fff", margin:"0 auto 8px" }}>{p.initials}</div>
+                <div style={{ color:"#fff", fontSize:16, fontWeight:600 }}>{p.name}</div>
+                {p.audioMuted && <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12 }}>Muted</div>}
+              </div>
+            ))}
+            {isMuted && <div style={{ position:"absolute", bottom:100, color:"rgba(255,255,255,0.6)", fontSize:13 }}>You are muted</div>}
+          </div>
         )}
       </div>
 
