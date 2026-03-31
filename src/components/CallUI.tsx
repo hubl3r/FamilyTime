@@ -284,7 +284,7 @@ export function InCallView({ localStream, remotePeers, isMuted, isCameraOff, isS
   const [isLandscape, setIsLandscape] = useState(false);
 
   useEffect(() => {
-    const check = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    const check = () => setIsLandscape(window.innerWidth > window.innerHeight * 1.2);
     check();
     window.addEventListener("resize", check);
     window.addEventListener("orientationchange", check);

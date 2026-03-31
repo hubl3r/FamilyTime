@@ -55,36 +55,40 @@ body {
 /* ── Landscape layout ── */
 @media (orientation: landscape) and (max-height: 500px) {
   :root {
-    --nav-height: 0px; /* bottom nav hidden in landscape */
+    --nav-height: 0px;
   }
 
-  /* Dashboard wrapper switches to row layout */
-  .dashboard-wrapper {
-    flex-direction: row !important;
-    padding-bottom: 0 !important;
+  /* Compact header in landscape */
+  header {
+    padding: 6px 12px !important;
+    min-height: 44px;
   }
 
-  /* Side nav in landscape */
-  .bottom-nav-landscape {
-    display: flex !important;
-  }
-  .bottom-nav-portrait {
+  /* Hide header text in landscape to save space */
+  .header-name-email {
     display: none !important;
   }
 
-  /* Main content gets left margin for side nav */
+  /* Main content gets left margin for side nav, smaller padding */
   .dashboard-main {
-    margin-left: var(--nav-width) !important;
-    padding: 0 12px !important;
+    padding: 0 8px !important;
+    max-width: 100% !important;
   }
 
-  /* Header becomes more compact */
-  .dashboard-header {
-    padding: 6px 12px !important;
+  /* Smaller base font in landscape */
+  :root {
+    --font-size-base: 13px;
+  }
+
+  /* Comms page full height in landscape */
+  .comms-conversation {
+    height: calc(100vh - 44px) !important;
   }
 }
 
-@media (orientation: portrait) {
-  .bottom-nav-landscape { display: none !important; }
-  .bottom-nav-portrait  { display: flex !important; }
+@media (orientation: landscape) {
+  /* Ensure video call fills properly */
+  video {
+    object-fit: cover;
+  }
 }

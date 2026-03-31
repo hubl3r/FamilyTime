@@ -8,7 +8,7 @@ export default function LandscapeWrapper({ children }: { children: ReactNode }) 
 
   useEffect(() => {
     const check = () => {
-      setIsLandscape(window.innerWidth > window.innerHeight && window.innerHeight < 500);
+      setIsLandscape(window.innerWidth > window.innerHeight * 1.2);
     };
     check();
     window.addEventListener("resize", check);

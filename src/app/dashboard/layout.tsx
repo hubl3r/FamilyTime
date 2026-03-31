@@ -44,7 +44,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <ContextSwitcher />
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-                <div style={{ textAlign:"right" }}>
+                <div className="header-name-email" style={{ textAlign:"right" }}>
                   <div style={{ fontSize:12, fontWeight:700, color:"var(--ink)", lineHeight:1.3 }}>{session.user?.name}</div>
                   <div style={{ fontSize:10, color:"var(--ink-subtle)", lineHeight:1.3 }}>{session.user?.email}</div>
                 </div>

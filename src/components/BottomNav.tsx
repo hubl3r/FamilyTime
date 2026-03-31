@@ -21,7 +21,7 @@ export default function BottomNav() {
 
   // Detect orientation
   useEffect(() => {
-    const check = () => setIsLandscape(window.innerWidth > window.innerHeight && window.innerHeight < 500);
+    const check = () => setIsLandscape(window.innerWidth > window.innerHeight * 1.2);
     check();
     window.addEventListener("resize", check);
     window.addEventListener("orientationchange", check);
