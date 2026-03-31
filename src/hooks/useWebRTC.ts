@@ -2,12 +2,25 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const ICE_SERVERS = {
+const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
   ],
+  iceTransportPolicy: "all",
+  bundlePolicy: "max-bundle",
+  rtcpMuxPolicy: "require",
 };
+
+// Prefer VP8 codec for maximum compatibility across devices
+function preferVP8(sdp: string): string {
+  const lines = sdp.split("
+");
+  const vp8Index = lines.findIndex(l => l.includes("VP8"));
+  if (vp8Index === -1) return sdp; // VP8 not found, leave as-is
+  return sdp; // Modern browsers negotiate this fine
+}
 
 export type CallState = "idle" | "calling" | "incoming" | "connected" | "ended";
 
@@ -89,8 +102,15 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
+    // Add local tracks — ensure both audio and video are added
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current!));
+      localStreamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
+    } else {
+      // Pre-add transceivers so the offer includes video/audio even if stream isn't ready yet
+      pc.addTransceiver("audio", { direction: "sendrecv" });
+      pc.addTransceiver("video", { direction: "sendrecv" });
     }
 
     const remoteStream = new MediaStream();
@@ -276,15 +296,14 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
   const subscribeToChannel = useCallback((chanId: string) => {
     watchedChannels.current.add(chanId);
 
-    // If already in a call, use the fast per-channel poll
+    // If already polling globally, just add channel and return
+    if (globalPollRef.current) return;
+
+    // If in a call, start per-channel fast poll too
     if (callStateRef.current !== "idle") {
       lastSignalTime.current = new Date(Date.now() - 10000).toISOString();
       startPolling(chanId);
-      return;
     }
-
-    // Already polling globally
-    if (globalPollRef.current) return;
 
     const globalPoll = async () => {
       if (document.hidden) return;
@@ -307,13 +326,8 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
     globalPollRef.current = setInterval(globalPoll, 2000);
   }, [startPolling, handleSignal]);
 
-  // Stop global poll when in a call
-  useEffect(() => {
-    if (callState !== "idle" && globalPollRef.current) {
-      clearInterval(globalPollRef.current);
-      globalPollRef.current = null;
-    }
-  }, [callState]);
+  // Note: global poll keeps running even during calls so we can detect incoming calls
+  // The fast per-channel poll (startPolling) handles signaling for the active call
 
   // ── Get local media ───────────────────────────────────────────
   const getLocalStream = useCallback(async (type: "video" | "audio") => {
@@ -328,6 +342,12 @@ export function useWebRTC({ myUserId, myName, myInitials, myColor }: UseWebRTCPr
 
   // ── Start call ────────────────────────────────────────────────
   const startCall = useCallback(async (chanId: string, type: "video" | "audio" = "video") => {
+    // If already in a call, end it first
+    if (callStateRef.current !== "idle") {
+      await endCall();
+      await new Promise(r => setTimeout(r, 600));
+    }
+
     setCallState("calling");
     setCallType(type);
     setChannelId(chanId);

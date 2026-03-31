@@ -134,7 +134,7 @@ function ConversationView({ contact, onBack, accent, myEmail }: {
     inputRef.current?.focus();
   };
 
-  const callDisabled = callState !== "idle";
+  const callDisabled = false; // Always allow — startCall handles in-call switching
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%", background:"#fff" }}>
