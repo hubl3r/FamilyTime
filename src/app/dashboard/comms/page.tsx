@@ -265,7 +265,7 @@ function CallLogItem({ log, myUserId, contacts, onCall, accent }: {
 export default function CommsPage() {
   const { me } = useUser();
   const { theme } = useTheme();
-  const { startCall, callState, subscribeToChannel } = useCall();
+  const { startCall, callState, subscribeToChannel, autoAnswer, setAutoAnswer } = useCall();
   const accent = theme.accent;
 
   const [tab, setTab]               = useState<"contacts"|"recent">("contacts");
@@ -367,6 +367,21 @@ export default function CommsPage() {
         ))}
       </div>
 
+      {/* Auto-answer toggle */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:"rgba(255,255,255,0.8)", borderRadius:14, border:"1px solid var(--border)", marginBottom:16 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, color:"var(--ink)" }}>Auto-Answer</div>
+          <div style={{ fontSize:11, color:"var(--ink-subtle)" }}>Automatically answer calls after 5 seconds</div>
+        </div>
+        <button onClick={() => setAutoAnswer(!autoAnswer)} style={{
+          width:48, height:28, borderRadius:14, border:"none", cursor:"pointer",
+          background: autoAnswer ? "var(--accent)" : "#D1D5DB",
+          position:"relative", transition:"background 0.2s",
+        }}>
+          <div style={{ position:"absolute", top:3, left: autoAnswer ? 23 : 3, width:22, height:22, borderRadius:11, background:"#fff", transition:"left 0.2s", boxShadow:"0 1px 4px rgba(0,0,0,0.2)" }}/>
+        </button>
+      </div>
+
       {/* Contacts tab */}
       {tab === "contacts" && (
         <div style={{ background:"rgba(255,255,255,0.85)", borderRadius:18, border:"1px solid var(--border)", overflow:"hidden" }}>
@@ -413,12 +428,11 @@ export default function CommsPage() {
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          // Find or create channel then call
                           const chs: Channel[] = await fetch("/api/messages/channels").then(r=>r.json());
                           const dm = chs.find(c => c.type==="direct" && c.dm_contact?.email===contact.email);
-                          if (dm) { startCall(dm.id, "audio"); return; }
+                          if (dm) { startCall(dm.id, "audio", `${contact.first_name} ${contact.last_name}`, contact.initials, contact.color); return; }
                           const res = await fetch("/api/messages/channels", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ type:"direct", user_ids:[contact.user_id] }) });
-                          if (res.ok) { const { channel_id } = await res.json(); startCall(channel_id, "audio"); }
+                          if (res.ok) { const { channel_id } = await res.json(); startCall(channel_id, "audio", `${contact.first_name} ${contact.last_name}`, contact.initials, contact.color); }
                         }}
                         disabled={callState !== "idle"}
                         style={{ width:34, height:34, borderRadius:10, background:"var(--sage-light)", border:"none", cursor: callState!=="idle" ? "not-allowed" : "pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", opacity: callState!=="idle" ? 0.5 : 1 }}
@@ -428,9 +442,9 @@ export default function CommsPage() {
                           e.stopPropagation();
                           const chs: Channel[] = await fetch("/api/messages/channels").then(r=>r.json());
                           const dm = chs.find(c => c.type==="direct" && c.dm_contact?.email===contact.email);
-                          if (dm) { startCall(dm.id, "video"); return; }
+                          if (dm) { startCall(dm.id, "video", `${contact.first_name} ${contact.last_name}`, contact.initials, contact.color); return; }
                           const res = await fetch("/api/messages/channels", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ type:"direct", user_ids:[contact.user_id] }) });
-                          if (res.ok) { const { channel_id } = await res.json(); startCall(channel_id, "video"); }
+                          if (res.ok) { const { channel_id } = await res.json(); startCall(channel_id, "video", `${contact.first_name} ${contact.last_name}`, contact.initials, contact.color); }
                         }}
                         disabled={callState !== "idle"}
                         style={{ width:34, height:34, borderRadius:10, background:"var(--sky-light)", border:"none", cursor: callState!=="idle" ? "not-allowed" : "pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", opacity: callState!=="idle" ? 0.5 : 1 }}

@@ -15,7 +15,9 @@ type CallContextType = {
   callType:           "video" | "audio";
   incomingCall:       IncomingCall | null;
   isFullScreen:       boolean;
-  startCall:          (channelId: string, type?: "video" | "audio") => void;
+  autoAnswer:         boolean;
+  setAutoAnswer:      (v: boolean) => void;
+  startCall:          (channelId: string, type?: "video" | "audio", calleeName?: string, calleeInitials?: string, calleeColor?: string) => void;
   endCall:            () => void;
   toggleMute:         () => void;
   toggleCamera:       () => void;
@@ -35,20 +37,27 @@ export function useCall() {
 export function CallProvider({ children }: { children: ReactNode }) {
   const { me } = useUser();
   const [isFullScreen, setFullScreen] = useState(true);
+  const [autoAnswer, setAutoAnswer]   = useState(false);
+  const [calleeName, setCalleeName]   = useState("");
+  const [calleeInitials, setCalleeInitials] = useState("");
+  const [calleeColor, setCalleeColor] = useState("#E8A5A5");
 
   const myName     = me ? `${me.first_name} ${me.last_name}` : "";
   const myInitials = me?.initials ?? "";
   const myColor    = me?.color ?? "#E8A5A5";
   const myEmail    = me?.email ?? "";
 
-  const webrtc = useWebRTC({
-    myUserId:   myEmail,
-    myName,
-    myInitials,
-    myColor,
-  });
+  const webrtc = useWebRTC({ myUserId: myEmail, myName, myInitials, myColor });
 
   const isInCall = webrtc.callState === "connected" || webrtc.callState === "calling";
+
+  const startCall = (channelId: string, type: "video"|"audio" = "video", name = "", initials = "", color = "#E8A5A5") => {
+    setCalleeName(name);
+    setCalleeInitials(initials);
+    setCalleeColor(color);
+    webrtc.startCall(channelId, type);
+    setFullScreen(true);
+  };
 
   const value: CallContextType = {
     callState:          webrtc.callState,
@@ -60,7 +69,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     callType:           webrtc.callType,
     incomingCall:       webrtc.incomingCall,
     isFullScreen,
-    startCall:          (channelId, type) => { webrtc.startCall(channelId, type); setFullScreen(true); },
+    autoAnswer,
+    setAutoAnswer,
+    startCall,
     endCall:            webrtc.endCall,
     toggleMute:         webrtc.toggleMute,
     toggleCamera:       webrtc.toggleCamera,
@@ -73,16 +84,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
     <CallContext.Provider value={value}>
       {children}
 
-      {/* Incoming call overlay */}
+      {/* Incoming call */}
       {webrtc.incomingCall && webrtc.callState === "incoming" && (
         <IncomingCallOverlay
           call={webrtc.incomingCall}
           onAccept={() => { webrtc.acceptCall(); setFullScreen(true); }}
           onDecline={webrtc.declineCall}
+          autoAnswerSeconds={autoAnswer ? 5 : undefined}
         />
       )}
 
-      {/* In-call: full screen or PiP */}
+      {/* In-call full screen */}
       {isInCall && isFullScreen && (
         <InCallView
           localStream={webrtc.localStream}
@@ -94,6 +106,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
           myName={myName}
           myInitials={myInitials}
           myColor={myColor}
+          calleeName={calleeName || webrtc.incomingCall?.fromName}
+          calleeInitials={calleeInitials || webrtc.incomingCall?.fromInitials}
+          calleeColor={calleeColor || webrtc.incomingCall?.fromColor}
           onToggleMute={webrtc.toggleMute}
           onToggleCamera={webrtc.toggleCamera}
           onToggleScreenShare={webrtc.toggleScreenShare}
